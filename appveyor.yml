@@ -22,7 +22,7 @@ before_build:
 build:
   project: src/1Script_Mono.sln
   publish_nuget: true
-  verbosity: detailed
+  verbosity: normal
 test_script:
 - cmd: appveyor-runtests.cmd
 after_build:
