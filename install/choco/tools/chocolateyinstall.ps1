@@ -17,8 +17,8 @@ $packageArgs = @{
   validExitCodes= @(0, 3010, 1641)
 
   registryUninstallerKey = 'onescript'
-  # 1.0.16 msi
-  checksum      = '2ce3b42857c9bb79ae6f63c25b805aa933f2bc8425074996e3491eec4c6750a9'
+  # 1.0.13 msi
+  checksum      = 'dd6a01f28f331ad09fcbaa1bd0dbc111c1673130d39ae46de60dc0933c717ba5'
   checksumType  = 'sha256'
   checksum64    = ''
   checksumType64= 'sha256'
