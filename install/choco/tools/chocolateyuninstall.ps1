@@ -5,9 +5,8 @@
 $ErrorActionPreference = 'Stop'; # stop on all errors
 
 $packageName = 'onescript'
-# registry uninstaller key name is the key that is found at HKLM:\Software\Windows\CurrentVersion\Uninstall\ THE NAME
-$registryUninstallerKeyName = 'onescript' #ensure this is the value in the registry
-$msiProductCodeGuid = '{insert it here}'
+$registryUninstallerKeyName = 'onescript'
+$msiProductCodeGuid = '0B8916C9-DB9D-4DF0-BBA9-D93D0AE6A55A' # (!) https://github.com/EvilBeaver/OneScript/blob/develop/src/Installer/Product.wxs
 $shouldUninstall = $true
 
 $local_key     = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$registryUninstallerKeyName"
@@ -26,16 +25,6 @@ if ($file -eq $null -or $file -eq '') {
     $shouldUninstall = $false
 }
 
-# The below is somewhat naive and built for EXE installers
-#$installerType = 'EXE' 
-#$silentArgs = '/S'
-#$validExitCodes = @(0)
-
-#if (!(Test-Path $file)) {
-#    Write-Host "$packageName has already been uninstalled by other means."
-#    $shouldUninstall = $false
-#}
-
 # The below is somewhat naive and built for MSI installers
 $installerType = 'MSI' 
 # The Product Code GUID is all that should be passed for MSI, and very FIRST,
@@ -52,10 +41,3 @@ $file = ''
 if ($shouldUninstall) {
  Uninstall-ChocolateyPackage -PackageName $packageName -FileType $installerType -SilentArgs $silentArgs -validExitCodes $validExitCodes -File $file
 }
-
-## OTHER HELPERS
-## https://github.com/chocolatey/choco/wiki/HelpersReference
-#Uninstall-ChocolateyZipPackage
-#Uninstall-BinFile # Only needed if you added one in the installer script, choco will remove the ones it added automatically.
-#remove any shortcuts you added
-

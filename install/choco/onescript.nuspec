@@ -5,28 +5,26 @@
     <!-- Read this before publishing packages to chocolatey.org: https://github.com/chocolatey/chocolatey/wiki/CreatePackages -->
     <id>onescript</id>
     <title>onescript (Install)</title>
-    <version>__REPLACE__</version>
-    <authors>__REPLACE_AUTHORS_OF_SOFTWARE_COMMA_SEPARATED__</authors>
-    <owners>__REPLACE_YOUR_NAME__</owners>
-    <summary>__REPLACE__</summary>
-    <description>__REPLACE__MarkDown_Okay 
+    <version>1.0.16</version>
+    <authors>OneScript Team</authors>
+    <summary>OneScript execution engine</summary>
+    <description>Cross-platform Basic-like scripting language
     </description>
-    <projectUrl></projectUrl>
-    <packageSourceUrl></packageSourceUrl>
-    <!--<projectSourceUrl></projectSourceUrl>
-    <docsUrl></docsUrl>
-    <mailingListUrl></mailingListUrl>
-    <bugTrackerUrl></bugTrackerUrl>-->
-    <tags>onescript admin SPACE_SEPARATED</tags>
-    <copyright></copyright>
-    <licenseUrl></licenseUrl>
+    <projectUrl>http://oscript.io</projectUrl>
+    <packageSourceUrl>https://github.com/EvilBeaver/OneScript</packageSourceUrl>
+    <projectSourceUrl>https://github.com/EvilBeaver/OneScript</projectSourceUrl>
+    <docsUrl>http://oscript.io/docs</docsUrl>
+    <bugTrackerUrl>https://github.com/EvilBeaver/OneScript/issues</bugTrackerUrl>
+    <tags>onescript admin oscript</tags>
+    <copyright>EvilBeaver and OneScript team</copyright>
+    <licenseUrl>https://www.mozilla.org/en-US/MPL/2.0/</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <!--<iconUrl>http://cdn.rawgit.com/__REPLACE_YOUR_REPO__/master/icons/onescript.png</iconUrl>-->
+    <iconUrl>https://raw.githubusercontent.com/EvilBeaver/OneScript/develop/src/TestApp/script_badge.ico</iconUrl>
     <!--<dependencies>
       <dependency id="" version="__VERSION__" />
       <dependency id="" />
     </dependencies>-->
-    <releaseNotes>__REPLACE_OR_REMOVE__MarkDown_Okay</releaseNotes>
+    <!-- releaseNotes>__REPLACE_OR_REMOVE__MarkDown_Okay</releaseNotes-->
     <!--<provides></provides>-->
   </metadata>
   <files>
