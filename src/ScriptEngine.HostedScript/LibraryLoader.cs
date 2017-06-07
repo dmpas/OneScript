@@ -115,7 +115,7 @@ namespace ScriptEngine.HostedScript
 
             try
             {
-                _env.InjectGlobalProperty(null, moduleName, true);
+                _env.InjectModuleAsProperty(moduleName, file);
             }
             catch (InvalidOperationException e)
 	        {

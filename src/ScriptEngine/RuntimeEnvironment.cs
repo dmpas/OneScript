@@ -34,13 +34,8 @@ namespace ScriptEngine
             RegisterObject(context);
         }
 
-        public void InjectGlobalProperty(IValue value, string identifier, bool readOnly)
+        private void InitGlobalScope()
         {
-            if(!Utils.IsValidIdentifier(identifier))
-            {
-                throw new ArgumentException("Invalid identifier", "identifier");
-            }
-
             if (_globalScope == null)
             {
                 _globalScope = new SymbolScope();
@@ -49,9 +44,31 @@ namespace ScriptEngine
                 _symbolScopes.PushScope(_globalScope);
                 RegisterObject(_injectedProperties);
             }
-            
+        }
+
+        public void InjectGlobalProperty(IValue value, string identifier, bool readOnly)
+        {
+            if(!Utils.IsValidIdentifier(identifier))
+            {
+                throw new ArgumentException("Invalid identifier", "identifier");
+            }
+
+            InitGlobalScope();
             _globalScope.DefineVariable(identifier, SymbolType.ContextProperty);
             _injectedProperties.Insert(value, identifier, true, !readOnly);
+        }
+
+        public void InjectModuleAsProperty(string identifier, object sourceIdentifier)
+        {
+            if (!Utils.IsValidIdentifier(identifier))
+            {
+                throw new ArgumentException("Invalid identifier", nameof(identifier));
+            }
+
+            InitGlobalScope();
+
+            _globalScope.DefineModule(identifier, sourceIdentifier);
+            _injectedProperties.Insert(null, identifier, canRead: true, canWrite: false);
         }
 
         public void SetGlobalProperty(string propertyName, IValue value)

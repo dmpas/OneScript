@@ -78,6 +78,31 @@ namespace ScriptEngine.Compiler
             return DefineVariable(name, SymbolType.Variable);
         }
 
+        public int DefineModule(string name, object moduleSourceIdentifier)
+        {
+            int index;
+            if (_variableNumbers.TryGetValue(name, out index))
+            {
+                if (_variables[index].SourceIdentifier == null
+                    || !_variables[index].SourceIdentifier.Equals(moduleSourceIdentifier))
+                {
+                    throw new InvalidOperationException($"Symbol already defined in the scope ({name})");
+                }
+                return index;
+            }
+            var newIdx = _variables.Count;
+            _variableNumbers[name] = newIdx;
+
+            _variables.Add(new VariableInfo() {
+                Index = newIdx,
+                Identifier = name,
+                Type = SymbolType.ContextProperty,
+                SourceIdentifier = moduleSourceIdentifier
+            });
+
+            return newIdx;
+        }
+
         public int DefineVariable(string name, SymbolType symbolType)
         {
             if (!IsVarDefined(name))

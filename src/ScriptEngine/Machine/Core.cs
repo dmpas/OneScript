@@ -247,6 +247,7 @@ namespace ScriptEngine.Machine
         public int Index;
         public string Identifier;
         public SymbolType Type;
+        public object SourceIdentifier;
     }
 
     struct VariableBinding
