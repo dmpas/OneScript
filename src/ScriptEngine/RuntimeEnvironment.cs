@@ -62,7 +62,7 @@ namespace ScriptEngine
         {
             if (!Utils.IsValidIdentifier(identifier))
             {
-                throw new ArgumentException("Invalid identifier", nameof(identifier));
+                throw new RuntimeException(string.Format("`{0} cannot be used as module name!`", identifier));
             }
 
             InitGlobalScope();
