@@ -1,4 +1,10 @@
-﻿using System;
+﻿/*----------------------------------------------------------
+This Source Code Form is subject to the terms of the 
+Mozilla Public License, v.2.0. If a copy of the MPL 
+was not distributed with this file, You can obtain one 
+at http://mozilla.org/MPL/2.0/.
+----------------------------------------------------------*/
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -213,7 +219,7 @@ namespace ScriptEngine.HostedScript.Library
         {
             if (_process.HasExited)
             {
-                _process.WaitForExit(); // ожидание закрытия потоков
+                _process.WaitForExit(15000); // ожидание закрытия потоков
             }
 
             _locker.EnterReadLock();
