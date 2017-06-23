@@ -4,13 +4,19 @@ pipeline {
     agent none
 
     environment {
-        releaseNumber = 17
+        ReleaseNumber = 17
         outputEnc = '65001'
     }
 
     stages {
         stage('01. Windows Build') {
-           agent { label 'windows' }
+            agent { label 'windows' }
+
+            // пути к инструментам доступны только когда
+            // нода уже определена
+            environment {
+                NugetPath = "${tool 'nuget'}"
+            }
 
             steps {
                 
@@ -25,8 +31,7 @@ pipeline {
                 {
                     checkout scm
 
-                    bat "chcp $outputEnc > nul\r\n\"${tool 'nuget'}\" restore src/1Script.sln"
-                    bat "chcp $outputEnc > nul\r\n\"${tool 'MSBuild'}\" BuildAll.csproj /p:Configuration=Release /p:Platform=x86 /p:ReleaseNumber=$releaseNumber /t:Build"
+                    bat "chcp $outputEnc > nul\r\n\"${tool 'MSBuild'}\" BuildAll.csproj /p:Configuration=Release /p:Platform=x86 /t:Build"
                     
                     stash includes: 'tests, install/build/**', name: 'buildResults'
                 }
@@ -51,11 +56,16 @@ pipeline {
         stage('03. Packaging') {
             agent { label 'windows' }
 
+            environment {
+                NugetPath = "${tool 'nuget'}"
+                InnoSetupPath = "${tool 'InnoSetup'}"
+            }
+            
             steps {
                 ws("$workspace".replaceAll("%", "_"))
                 {
                     unstash 'buildResults'
-                    bat "chcp $outputEnc > nul\r\n\"${tool 'MSBuild'}\" BuildAll.csproj /p:Configuration=Release /p:Platform=x86 /p:ReleaseNumber=$releaseNumber /p:InnoSetupPath=\"${tool 'InnoSetup'}\" /t:CreateZip;CreateMSI;CreateNuget"
+                    bat "chcp $outputEnc > nul\r\n\"${tool 'MSBuild'}\" BuildAll.csproj /p:Configuration=Release /p:Platform=x86 /t:CreateZip;CreateNuget"
                     archiveArtifacts artifacts: '**/dist/*.exe, **/dist/*.msi, **/dist/*.zip, **/dist/*.nupkg, **/tests/*.xml', fingerprint: true
                 }
             }
