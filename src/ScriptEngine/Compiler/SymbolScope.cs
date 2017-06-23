@@ -86,7 +86,8 @@ namespace ScriptEngine.Compiler
                 if (_variables[index].SourceIdentifier == null
                     || !_variables[index].SourceIdentifier.Equals(moduleSourceIdentifier))
                 {
-                    throw new InvalidOperationException($"Symbol already defined in the scope ({name})");
+                    throw new InvalidOperationException(string.Format("Symbol already defined in the scope ({0}) [loaded `{1}`, new `{2}`]",
+                                                                      name, _variables[index].SourceIdentifier, moduleSourceIdentifier));
                 }
                 return index;
             }

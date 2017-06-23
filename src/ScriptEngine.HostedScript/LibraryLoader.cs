@@ -120,7 +120,7 @@ namespace ScriptEngine.HostedScript
             catch (InvalidOperationException e)
 	        {
                 // символ уже определен
-                throw new RuntimeException(String.Format("Невозможно загрузить модуль {0}. Такой символ уже определен.", moduleName), e);
+                throw new RuntimeException(String.Format("Невозможно загрузить модуль {0}. Такой символ уже определен. {1}", moduleName, e.Message), e);
             }
         }
 
