@@ -34,6 +34,7 @@ namespace ScriptEngine.HostedScript
         private class Library
         {
             public string id;
+            public string rootPath;
             public ProcessingState state;
             public LibraryLoader customLoader;
         }
@@ -164,6 +165,15 @@ namespace ScriptEngine.HostedScript
 
         }
 
+        private bool PathIsANamedLibraryRoot(string path)
+        {
+            if (File.Exists(Path.Combine(path, "packagedef")))
+            {
+                return true;
+            }
+            return false;
+        }
+
         private bool LoadByRelativePath(string libraryPath)
         {
             string realPath;
@@ -185,7 +195,16 @@ namespace ScriptEngine.HostedScript
                 realPath = libraryPath;
             }
 
-            return LoadByPath(realPath);
+            // Если в каталоге есть packagedef, то считаем, что это не просто библиотека, а пакет, у которого есть имя
+            // Конкретный случай: пакет использует сам себя, но обратиться к себе по имени не может
+            string evaluatedName = null;
+            if (PathIsANamedLibraryRoot(realPath))
+            {
+                var rootInfo = new DirectoryInfo(realPath);
+                evaluatedName = rootInfo.Name;
+            }
+
+            return LoadByPath(realPath, evaluatedName);
         }
 
         private static bool PathHasInvalidChars(string path)
@@ -206,11 +225,11 @@ namespace ScriptEngine.HostedScript
             
         }
 
-        private bool LoadByPath(string libraryPath)
+        private bool LoadByPath(string libraryPath, string libraryName)
         {
             if (Directory.Exists(libraryPath))
             {
-                return LoadLibraryInternal(libraryPath);
+                return LoadLibraryInternal(libraryPath, libraryName);
             }
 
             return false;
@@ -219,7 +238,7 @@ namespace ScriptEngine.HostedScript
         private bool LoadByName(string value)
         {
             var rootPath = Path.Combine(LibraryRoot, value);
-            if (LoadByPath(rootPath))
+            if (LoadByPath(rootPath, value))
                 return true;
             
             foreach (var path in SearchDirectories)
@@ -228,16 +247,16 @@ namespace ScriptEngine.HostedScript
                     continue;
 
                 var libraryPath = Path.Combine(path, value);
-                if (LoadByPath(libraryPath))
+                if (LoadByPath(libraryPath, value))
                     return true;
             }
 
             return false;
         }
 
-        private bool LoadLibraryInternal(string libraryPath)
+        private bool LoadLibraryInternal(string libraryPath, string libraryName)
         {
-            var id = GetLibraryId(libraryPath);
+            var id = GetLibraryId(libraryPath, libraryName);
             var existedLib = _libs.FirstOrDefault(x => x.id == id);
             if(existedLib != null)
             {
@@ -251,7 +270,7 @@ namespace ScriptEngine.HostedScript
                 return true;
             }
 
-            var newLib = new Library() { id = id, state = ProcessingState.Discovered };
+            var newLib = new Library() { id = id, rootPath = libraryPath, state = ProcessingState.Discovered };
             bool hasFiles;
             int newLibIndex = _libs.Count;
             
@@ -282,7 +301,7 @@ namespace ScriptEngine.HostedScript
             {
                 builder.Append(offset);
                 builder.Append("-> ");
-                builder.AppendLine(library.id);
+                builder.AppendLine(string.Format("{0}({1})", library.id, library.rootPath));
                 offset += "  ";
                 if (library.id == stopToken)
                 {
@@ -293,9 +312,9 @@ namespace ScriptEngine.HostedScript
             return builder.ToString();
         }
 
-        private string GetLibraryId(string libraryPath)
+        private string GetLibraryId(string libraryPath, string libraryName = null)
         {
-            return Path.GetFullPath(libraryPath);
+            return libraryName ?? Path.GetFullPath(libraryPath);
         }
 
         private bool ProcessLibrary(Library lib)
@@ -306,7 +325,7 @@ namespace ScriptEngine.HostedScript
             else
                 loader = this.DefaultLoader;
 
-            return loader.ProcessLibrary(lib.id);
+            return loader.ProcessLibrary(lib.rootPath);
         }
 
     }
