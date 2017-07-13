@@ -3,13 +3,13 @@
 $urltag = $version -replace '\.', '_'
 $packageName = 'onescript'
 $toolsDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
-$url = "http://oscript.io/downloads/$urltag/msi"
+$url = "http://oscript.io/downloads/$urltag/exe"
 $url64 = ''
 
 $packageArgs = @{
   packageName   = $packageName
   unzipLocation = $toolsDir
-  fileType      = 'msi'
+  fileType      = 'exe'
   url           = $url
   url64bit      = $url64
 
@@ -17,8 +17,8 @@ $packageArgs = @{
   validExitCodes= @(0, 3010, 1641)
 
   registryUninstallerKey = 'onescript'
-  # 1.0.16 msi
-  checksum      = '2ce3b42857c9bb79ae6f63c25b805aa933f2bc8425074996e3491eec4c6750a9'
+  # 1.0.17 exe
+  checksum      = 'e5cd7c58bab04e4a8893fc4a7f1cc1f2e5870f929ba10e7518deb8928ba68348'
   checksumType  = 'sha256'
   checksum64    = ''
   checksumType64= 'sha256'
