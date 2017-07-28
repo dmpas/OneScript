@@ -182,6 +182,11 @@ namespace ScriptEngine.Compiler
                     HandleDirective(isCodeEntered);
                     UpdateCompositeContext(); // костыль для #330
                 }
+                else if(_lastExtractedLexem.Type == LexemType.Label)
+                {
+                    isCodeEntered = true;
+                    BuildSetLabelStatement();
+                }
                 else
                 {
                     throw CompilerException.UnexpectedOperation();
@@ -549,19 +554,24 @@ namespace ScriptEngine.Compiler
                     continue;
                 }
 
-                if (_lastExtractedLexem.Type != LexemType.Identifier && _lastExtractedLexem.Token != Token.EndOfText)
+                if (_lastExtractedLexem.Type == LexemType.Label)
+                {
+                    BuildSetLabelStatement();
+                    continue; // Перепрыгиваем проверку на ";"
+                }
+                else if (_lastExtractedLexem.Token == Token.NotAToken)
+                {
+                    BuildSimpleStatement();
+                }
+                else if (_lastExtractedLexem.Type == LexemType.Identifier)
+                {
+                    BuildComplexStructureStatement();
+                }
+                else
                 {
                     throw CompilerException.UnexpectedOperation();
                 }
 
-                if (_lastExtractedLexem.Token == Token.NotAToken)
-                {
-                    BuildSimpleStatement();
-                }
-                else
-                {
-                    BuildComplexStructureStatement();
-                }
 
                 if (_lastExtractedLexem.Token != Token.Semicolon)
                 {
@@ -611,10 +621,65 @@ namespace ScriptEngine.Compiler
                 case Token.RaiseException:
                     BuildRaiseExceptionStatement();
                     break;
+                case Token.Goto:
+                    BuildGotoStatement();
+                    break;
                 default:
                     var expected = PopStructureToken();
                     throw CompilerException.TokenExpected(expected);
             }
+        }
+
+        // TODO: move up
+        Dictionary<string, int> _labels = new Dictionary<string, int>();
+        Dictionary<string, List<int>> _forwardLabelCall = new Dictionary<string, List<int>>();
+
+        private void BuildGotoStatement()
+        {
+            NextToken();
+            if (_lastExtractedLexem.Type != LexemType.Label)
+            {
+                // TODO: Внятное исключение
+                throw CompilerException.UnexpectedOperation();
+            }
+
+            int index = 0;
+            var identifier = _lastExtractedLexem.Content;
+            if (_labels.TryGetValue(identifier, out index))
+            {
+                var currentIndex = AddCommand(OperationCode.Jmp, index);
+                List<int> forwardedList = null;
+                if (_forwardLabelCall.TryGetValue(identifier, out forwardedList)) {
+                    foreach (var cmdIndex in forwardedList)
+                    {
+                        _module.Code[cmdIndex] = new Command() { Code = OperationCode.Jmp, Argument = currentIndex };
+                    }
+                    _forwardLabelCall.Remove(identifier);
+                }
+            }
+            else
+            {
+                var currentIndex = AddCommand(OperationCode.Jmp, -1);
+                List<int> forwardedList = null;
+                if (!_forwardLabelCall.TryGetValue(identifier, out forwardedList)) {
+                    forwardedList = new List<int>();
+                    _forwardLabelCall[identifier] = forwardedList;
+                }
+                forwardedList.Add(currentIndex);
+            }
+
+            NextToken();
+        }
+
+        private void BuildSetLabelStatement()
+        {
+            var identifier = _lastExtractedLexem.Content;
+            NextToken();
+
+            var index = AddCommand(OperationCode.Nop, 0);
+            _labels[identifier] = index;
+
+            NextToken();
         }
 
         private void BuildIfStatement()

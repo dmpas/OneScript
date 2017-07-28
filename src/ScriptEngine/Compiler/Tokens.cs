@@ -76,6 +76,8 @@ namespace ScriptEngine.Compiler
             AddToken(Token.Or, "или", "or");
             AddToken(Token.Not, "не", "not");
 
+            AddToken(Token.Goto, "перейти", "goto");
+
             #endregion
 
             #region Операторы
@@ -277,6 +279,7 @@ namespace ScriptEngine.Compiler
         public const char DateQuote = '\'';
         public const char EndOperator = ';';
         public const char Directive = '#';
+        public const char Label = '~';
 
         public static bool IsOperatorChar(char symbol)
         {
@@ -296,6 +299,7 @@ namespace ScriptEngine.Compiler
                 case ',':
                 case '[':
                 case ']':
+                case ':':
                     return true;
                 default:
                     return false;
@@ -341,6 +345,7 @@ namespace ScriptEngine.Compiler
         EndTry,
         EndOfText,
         Export,
+        Goto,
 
         // operators
         Plus,

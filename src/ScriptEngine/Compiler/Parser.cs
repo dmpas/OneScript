@@ -16,6 +16,7 @@ namespace ScriptEngine.Compiler
         private ParseIterator _iterator;
 
         private readonly ParserState _wordState = new WordParserState();
+        private readonly ParserState _labelState = new LabelParserState();
         private readonly ParserState _numberState = new NumberParserState();
         private readonly ParserState _stringState = new StringParserState();
         private readonly ParserState _operatorState = new OperatorParserState();
@@ -80,6 +81,10 @@ namespace ScriptEngine.Compiler
                     {
                         _iterator.MoveNext();
                         return new Lexem() { Type = LexemType.Identifier, Token = Token.Question };
+                    }
+                    else if(cs == SpecialChars.Label)
+                    {
+                        state = _labelState;
                     }
                     else if(cs == SpecialChars.Directive)
                     {
@@ -157,6 +162,7 @@ namespace ScriptEngine.Compiler
     {
         NotALexem,
         Identifier,
+        Label,
         Operator,
         StringLiteral,
         DateLiteral,
@@ -585,6 +591,31 @@ namespace ScriptEngine.Compiler
             }
             else
                 throw CreateExceptionOnCurrentLine("Ожидается директива", iterator);
+
+            return lex;
+        }
+
+    }
+
+    class LabelParserState : ParserState
+    {
+        public override Lexem ReadNextLexem(ParseIterator iterator)
+        {
+            System.Diagnostics.Debug.Assert(iterator.CurrentSymbol == SpecialChars.Label);
+            iterator.MoveNext();
+            if (!iterator.MoveToContent()) {
+                throw CreateExceptionOnCurrentLine("Ожидается идентификатор", iterator);
+            }
+
+
+            var wps = new WordParserState();
+            var lex = wps.ReadNextLexem(iterator);
+            if (lex.Type == LexemType.Identifier && lex.Token == Token.NotAToken)
+            {
+                lex.Type = LexemType.Label;
+            }
+            else
+                throw CreateExceptionOnCurrentLine("Ожидается идентификатор", iterator);
 
             return lex;
         }
