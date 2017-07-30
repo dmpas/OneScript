@@ -22,6 +22,57 @@ namespace ScriptEngine.Compiler
 
         readonly List<MethodInfo> _methods = new List<MethodInfo>();
 
+        readonly Dictionary<string, int> _labels = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        readonly Dictionary<string, List<int>> _labelForwardCalls = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+
+        public bool HasLabel(string labelName)
+        {
+            int index = 0;
+            return _labels.TryGetValue(labelName, out index);
+        }
+
+        public void RegisterLabel(string labelName, int position)
+        {
+            _labels[labelName] = position;
+        }
+
+        public int GetLabelPosition(string labelName)
+        {
+            return _labels[labelName];
+        }
+
+        public void RegisterForwardCall(string labelName, int callerPosition)
+        {
+            List<int> _points = null;
+            if (!_labelForwardCalls.TryGetValue(labelName, out _points))
+            {
+                _points = new List<int>();
+                _labelForwardCalls[labelName] = _points;
+            }
+            _points.Add(callerPosition);
+        }
+
+        public IEnumerable<int> GetCallPositionsForLabel(string labelName)
+        {
+            List<int> _points = null;
+            if (!_labelForwardCalls.TryGetValue(labelName, out _points))
+            {
+                return new List<int>();
+            }
+            return _points;
+        }
+
+        public void ClearForwardCallsForLabel(string labelName)
+        {
+            _labelForwardCalls.Remove(labelName);
+        }
+
+        public IEnumerable<string> GetForwardLabelNames()
+        {
+            return _labelForwardCalls.Keys;
+        }
+
         public MethodInfo GetMethod(string name)
         {
             var num = GetMethodNumber(name);

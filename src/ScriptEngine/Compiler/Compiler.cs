@@ -630,10 +630,6 @@ namespace ScriptEngine.Compiler
             }
         }
 
-        // TODO: move up
-        Dictionary<string, int> _labels = new Dictionary<string, int>();
-        Dictionary<string, List<int>> _forwardLabelCall = new Dictionary<string, List<int>>();
-
         private void BuildGotoStatement()
         {
             NextToken();
@@ -643,29 +639,17 @@ namespace ScriptEngine.Compiler
                 throw CompilerException.UnexpectedOperation();
             }
 
-            int index = 0;
+            var scope = _ctx.Peek();
             var identifier = _lastExtractedLexem.Content;
-            if (_labels.TryGetValue(identifier, out index))
+            if (scope.HasLabel(identifier))
             {
+                var index = scope.GetLabelPosition(identifier);
                 var currentIndex = AddCommand(OperationCode.Jmp, index);
-                List<int> forwardedList = null;
-                if (_forwardLabelCall.TryGetValue(identifier, out forwardedList)) {
-                    foreach (var cmdIndex in forwardedList)
-                    {
-                        _module.Code[cmdIndex] = new Command() { Code = OperationCode.Jmp, Argument = currentIndex };
-                    }
-                    _forwardLabelCall.Remove(identifier);
-                }
             }
             else
             {
                 var currentIndex = AddCommand(OperationCode.Jmp, -1);
-                List<int> forwardedList = null;
-                if (!_forwardLabelCall.TryGetValue(identifier, out forwardedList)) {
-                    forwardedList = new List<int>();
-                    _forwardLabelCall[identifier] = forwardedList;
-                }
-                forwardedList.Add(currentIndex);
+                scope.RegisterForwardCall(identifier, currentIndex);
             }
 
             NextToken();
@@ -674,18 +658,23 @@ namespace ScriptEngine.Compiler
         private void BuildSetLabelStatement()
         {
             var identifier = _lastExtractedLexem.Content;
+            var scope = _ctx.Peek();
+            if (scope.HasLabel(identifier))
             {
-                int _index = 0;
-                if (_labels.TryGetValue(identifier, out _index)) {
-                    // TODO: Внятное исключение - переопределение метки
-                    throw CompilerException.UnexpectedOperation();
-                }
+                // TODO: внятное исключение - метка уже зарегистрирована
+                throw CompilerException.UnexpectedOperation();
             }
 
-            NextToken();
+            NextToken(); // пропускаем ":"
 
-            var index = AddCommand(OperationCode.Nop, 0);
-            _labels[identifier] = index;
+            var index = AddCommand(OperationCode.Nop, 0); // Do we really need a Nop ??
+            scope.RegisterLabel(identifier, index);
+
+            foreach (var cmdIndex in scope.GetCallPositionsForLabel(identifier))
+            {
+                _module.Code[cmdIndex] = new Command() { Code = OperationCode.Jmp, Argument = index };
+            }
+            scope.ClearForwardCallsForLabel(identifier);
 
             NextToken();
         }
