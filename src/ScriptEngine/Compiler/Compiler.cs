@@ -674,6 +674,14 @@ namespace ScriptEngine.Compiler
         private void BuildSetLabelStatement()
         {
             var identifier = _lastExtractedLexem.Content;
+            {
+                int _index = 0;
+                if (_labels.TryGetValue(identifier, out _index)) {
+                    // TODO: Внятное исключение - переопределение метки
+                    throw CompilerException.UnexpectedOperation();
+                }
+            }
+
             NextToken();
 
             var index = AddCommand(OperationCode.Nop, 0);
