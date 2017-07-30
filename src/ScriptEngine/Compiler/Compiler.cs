@@ -281,6 +281,7 @@ namespace ScriptEngine.Compiler
             PopStructureToken();
 
             var localCtx = _ctx.PopScope();
+            localCtx.CheckUndefinedLabels();
             
             var topIdx = _ctx.TopIndex();
 
@@ -513,6 +514,8 @@ namespace ScriptEngine.Compiler
                 
             }
 
+            _ctx.Peek().CheckUndefinedLabels();
+
             var codeEnd = _module.Code.Count;
 
             if (_lastExtractedLexem.Token == Token.EndProcedure
@@ -632,6 +635,7 @@ namespace ScriptEngine.Compiler
 
         private void BuildGotoStatement()
         {
+            var lineNumber = _lastExtractedLexem.LineNumber;
             NextToken();
             if (_lastExtractedLexem.Type != LexemType.Label)
             {
@@ -649,7 +653,7 @@ namespace ScriptEngine.Compiler
             else
             {
                 var currentIndex = AddCommand(OperationCode.Jmp, -1);
-                scope.RegisterForwardCall(identifier, currentIndex);
+                scope.RegisterForwardCall(identifier, currentIndex, lineNumber);
             }
 
             NextToken();

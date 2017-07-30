@@ -25,6 +25,7 @@ namespace ScriptEngine.Compiler
         readonly Dictionary<string, int> _labels = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         readonly Dictionary<string, List<int>> _labelForwardCalls = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<string, int> _labelForwardCallsLineNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         public bool HasLabel(string labelName)
         {
@@ -42,7 +43,7 @@ namespace ScriptEngine.Compiler
             return _labels[labelName];
         }
 
-        public void RegisterForwardCall(string labelName, int callerPosition)
+        public void RegisterForwardCall(string labelName, int callerPosition, int lineNumber)
         {
             List<int> _points = null;
             if (!_labelForwardCalls.TryGetValue(labelName, out _points))
@@ -51,6 +52,16 @@ namespace ScriptEngine.Compiler
                 _labelForwardCalls[labelName] = _points;
             }
             _points.Add(callerPosition);
+            _labelForwardCallsLineNumbers[labelName] = lineNumber;
+        }
+
+        public void CheckUndefinedLabels()
+        {
+            foreach (var labelCall in _labelForwardCallsLineNumbers)
+            {
+                // TODO: Внятное исключение - имя метки, номер строки
+                throw CompilerException.UnexpectedOperation();
+            }
         }
 
         public IEnumerable<int> GetCallPositionsForLabel(string labelName)
@@ -66,6 +77,7 @@ namespace ScriptEngine.Compiler
         public void ClearForwardCallsForLabel(string labelName)
         {
             _labelForwardCalls.Remove(labelName);
+            _labelForwardCallsLineNumbers.Remove(labelName);
         }
 
         public IEnumerable<string> GetForwardLabelNames()
