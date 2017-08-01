@@ -85,6 +85,7 @@
       <Word>и</Word>
       <Word>или</Word>
       <Word>не</Word>
+      <Word>Перейти</Word>
       
       <!-- English -->
       <Word>Var</Word>
@@ -120,6 +121,7 @@
       <Word>and</Word>
       <Word>or</Word>
       <Word>not</Word>
+      <Word>Goto</Word>
 
     </Keywords>
 
