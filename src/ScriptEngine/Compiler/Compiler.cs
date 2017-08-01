@@ -639,13 +639,13 @@ namespace ScriptEngine.Compiler
             NextToken();
             if (_lastExtractedLexem.Type != LexemType.Label)
             {
-                // TODO: Внятное исключение
-                throw CompilerException.UnexpectedOperation();
+                throw CompilerException.LabelExpected();
             }
 
             var scope = _ctx.Peek();
             var identifier = _lastExtractedLexem.Content;
-            if (scope.HasLabel(identifier))
+            int registeredLineNumber;
+            if (scope.HasLabel(identifier, out registeredLineNumber))
             {
                 var index = scope.GetLabelPosition(identifier);
                 var currentIndex = AddCommand(OperationCode.Jmp, index);
@@ -662,17 +662,18 @@ namespace ScriptEngine.Compiler
         private void BuildSetLabelStatement()
         {
             var identifier = _lastExtractedLexem.Content;
+            var lineNumber = _lastExtractedLexem.LineNumber;
             var scope = _ctx.Peek();
-            if (scope.HasLabel(identifier))
+            int registeredLineNumber;
+            if (scope.HasLabel(identifier, out registeredLineNumber))
             {
-                // TODO: внятное исключение - метка уже зарегистрирована
-                throw CompilerException.UnexpectedOperation();
+                throw CompilerException.LabelAlreadyRegistered(registeredLineNumber);
             }
 
             NextToken(); // пропускаем ":"
 
             var index = AddCommand(OperationCode.Nop, 0); // Do we really need a Nop ??
-            scope.RegisterLabel(identifier, index);
+            scope.RegisterLabel(identifier, index, lineNumber);
 
             foreach (var cmdIndex in scope.GetCallPositionsForLabel(identifier))
             {

@@ -37,6 +37,22 @@ namespace ScriptEngine.Compiler
             return new CompilerException("Неизвестная операция");
         }
 
+        internal static CompilerException LabelExpected()
+        {
+            return new CompilerException("Ожидается метка");
+        }
+
+        internal static CompilerException LabelAlreadyRegistered(int lineNumber)
+        {
+            return new CompilerException(string.Format("Метка с таким именем уже объявлена в строке {0}", lineNumber));
+        }
+
+        internal static CompilerException UndefinedLabelCall(string labelName, int callLineNumber)
+        {
+            var err = new CompilerException(string.Format("Метка для перехода на определена (~{0})", labelName));
+            return AppendCodeInfo(err, new CodePositionInfo { LineNumber = callLineNumber });
+        }
+
         internal static CompilerException IdentifierExpected()
         {
             return new CompilerException("Ожидается идентификатор");

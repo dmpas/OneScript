@@ -25,17 +25,18 @@ namespace ScriptEngine.Compiler
         readonly Dictionary<string, int> _labels = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         readonly Dictionary<string, List<int>> _labelForwardCalls = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<string, int> _labelLineNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<string, int> _labelForwardCallsLineNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        public bool HasLabel(string labelName)
+        public bool HasLabel(string labelName, out int lineNumber)
         {
-            int index = 0;
-            return _labels.TryGetValue(labelName, out index);
+            return _labelLineNumbers.TryGetValue(labelName, out lineNumber);
         }
 
-        public void RegisterLabel(string labelName, int position)
+        public void RegisterLabel(string labelName, int position, int lineNumber)
         {
             _labels[labelName] = position;
+            _labelLineNumbers[labelName] = lineNumber;
         }
 
         public int GetLabelPosition(string labelName)
@@ -59,8 +60,7 @@ namespace ScriptEngine.Compiler
         {
             foreach (var labelCall in _labelForwardCallsLineNumbers)
             {
-                // TODO: Внятное исключение - имя метки, номер строки
-                throw CompilerException.UnexpectedOperation();
+                throw CompilerException.UndefinedLabelCall(labelCall.Key, labelCall.Value);
             }
         }
 
