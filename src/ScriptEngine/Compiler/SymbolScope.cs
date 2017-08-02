@@ -12,6 +12,24 @@ using ScriptEngine.Machine;
 
 namespace ScriptEngine.Compiler
 {
+    class LabelInfo
+    {
+        public LabelInfo(string labelName, CodeBatchHierarchy hierarchy = null)
+        {
+            LabelName = labelName;
+            Hierarchy = hierarchy;
+        }
+
+        public string LabelName { get; }
+        public CodeBatchHierarchy Hierarchy;
+        public List<CodeBatchHierarchy> ForwardCalls { get; } = new List<CodeBatchHierarchy>();
+
+        public bool IsDefined()
+        {
+            return Hierarchy != null;
+        }
+    }
+
     class SymbolScope
     {
         readonly Dictionary<string, int> _variableNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -22,67 +40,74 @@ namespace ScriptEngine.Compiler
 
         readonly List<MethodInfo> _methods = new List<MethodInfo>();
 
-        readonly Dictionary<string, int> _labels = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<string, LabelInfo> _labels = new Dictionary<string, LabelInfo>(StringComparer.OrdinalIgnoreCase);
 
-        readonly Dictionary<string, List<int>> _labelForwardCalls = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
-        readonly Dictionary<string, int> _labelLineNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        readonly Dictionary<string, int> _labelForwardCallsLineNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-        public bool HasLabel(string labelName, out int lineNumber)
+        public bool HasLabel(string labelName, out CodeBatchHierarchy labelPosition)
         {
-            return _labelLineNumbers.TryGetValue(labelName, out lineNumber);
+            LabelInfo labelInfo;
+            if (_labels.TryGetValue(labelName, out labelInfo))
+            {
+                if (labelInfo.IsDefined())
+                {
+                    labelPosition = labelInfo.Hierarchy;
+                    return true;
+                }
+            }
+            labelPosition = null;
+            return false;
         }
 
-        public void RegisterLabel(string labelName, int position, int lineNumber)
+        public void RegisterLabel(string labelName, CodeBatchHierarchy hierarchy)
         {
-            _labels[labelName] = position;
-            _labelLineNumbers[labelName] = lineNumber;
+            LabelInfo labelInfo;
+            if (!_labels.TryGetValue(labelName, out labelInfo))
+            {
+                labelInfo = new LabelInfo(labelName, hierarchy);
+                _labels[labelName] = labelInfo;
+            }
+            labelInfo.Hierarchy = hierarchy;
         }
 
         public int GetLabelPosition(string labelName)
         {
-            return _labels[labelName];
+            return _labels[labelName].Hierarchy.CodePosition;
         }
 
-        public void RegisterForwardCall(string labelName, int callerPosition, int lineNumber)
+        public void RegisterForwardCall(string labelName, CodeBatchHierarchy callerPosition)
         {
-            List<int> _points = null;
-            if (!_labelForwardCalls.TryGetValue(labelName, out _points))
+            LabelInfo labelInfo;
+            if (!_labels.TryGetValue(labelName, out labelInfo))
             {
-                _points = new List<int>();
-                _labelForwardCalls[labelName] = _points;
+                labelInfo = new LabelInfo(labelName);
+                _labels[labelName] = labelInfo;
             }
-            _points.Add(callerPosition);
-            _labelForwardCallsLineNumbers[labelName] = lineNumber;
+            labelInfo.ForwardCalls.Add(callerPosition);
         }
 
         public void CheckUndefinedLabels()
         {
-            foreach (var labelCall in _labelForwardCallsLineNumbers)
+            foreach (var label in _labels)
             {
-                throw CompilerException.UndefinedLabelCall(labelCall.Key, labelCall.Value);
+                foreach (var call in label.Value.ForwardCalls)
+                {
+                    throw CompilerException.UndefinedLabelCall(label.Key, call.LineNumber);
+                }
             }
         }
 
-        public IEnumerable<int> GetCallPositionsForLabel(string labelName)
+        public IEnumerable<CodeBatchHierarchy> GetCallPositionsForLabel(string labelName)
         {
-            List<int> _points = null;
-            if (!_labelForwardCalls.TryGetValue(labelName, out _points))
+            LabelInfo labelInfo;
+            if (!_labels.TryGetValue(labelName, out labelInfo))
             {
-                return new List<int>();
+                return new List<CodeBatchHierarchy>();
             }
-            return _points;
+            return labelInfo.ForwardCalls;
         }
 
         public void ClearForwardCallsForLabel(string labelName)
         {
-            _labelForwardCalls.Remove(labelName);
-            _labelForwardCallsLineNumbers.Remove(labelName);
-        }
-
-        public IEnumerable<string> GetForwardLabelNames()
-        {
-            return _labelForwardCalls.Keys;
+            _labels[labelName].ForwardCalls.Clear();
         }
 
         public MethodInfo GetMethod(string name)

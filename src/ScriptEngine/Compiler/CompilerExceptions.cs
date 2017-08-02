@@ -37,6 +37,14 @@ namespace ScriptEngine.Compiler
             return new CompilerException("Неизвестная операция");
         }
 
+        internal static CompilerException ForbiddenLabelJump(string labelName, int callerLineNumber = -1)
+        {
+            var err = new CompilerException(string.Format("Недопустимый переход на метку ~{0}", labelName));
+            if (callerLineNumber != -1)
+                return AppendCodeInfo(err, new CodePositionInfo { LineNumber = callerLineNumber });
+            return err;
+        }
+
         internal static CompilerException LabelExpected()
         {
             return new CompilerException("Ожидается метка");

@@ -18,6 +18,7 @@ namespace ScriptEngine.Compiler
 
         private Parser _parser;
         private ICompilerContext _ctx;
+        private CodeBatchHierarchy currentCodeBatch = new CodeBatchHierarchy();
         private ModuleImage _module;
         private Lexem _lastExtractedLexem;
         private bool _inMethodScope = false;
@@ -29,6 +30,7 @@ namespace ScriptEngine.Compiler
         private readonly Stack<Token[]> _tokenStack = new Stack<Token[]>();
         private readonly Stack<NestedLoopInfo> _nestedLoops = new Stack<NestedLoopInfo>();
         private readonly List<ForwardedMethodDecl> _forwardedMethods = new List<ForwardedMethodDecl>();
+
 
         private struct ForwardedMethodDecl
         {
@@ -545,11 +547,12 @@ namespace ScriptEngine.Compiler
         {
             var endTokens = _tokenStack.Peek();
 
+            currentCodeBatch = new CodeBatchHierarchy(currentCodeBatch);
             while (true)
             {
                 if (endTokens.Contains(_lastExtractedLexem.Token))
                 {
-                    return;
+                    break;
                 }
                 if (_lastExtractedLexem.Token == Token.Semicolon)
                 {
@@ -592,6 +595,8 @@ namespace ScriptEngine.Compiler
                     NextToken();
                 }
             }
+
+            currentCodeBatch = currentCodeBatch.Parent;
 
         }
 
@@ -644,16 +649,20 @@ namespace ScriptEngine.Compiler
 
             var scope = _ctx.Peek();
             var identifier = _lastExtractedLexem.Content;
-            int registeredLineNumber;
-            if (scope.HasLabel(identifier, out registeredLineNumber))
+            CodeBatchHierarchy labelPosition;
+            if (scope.HasLabel(identifier, out labelPosition))
             {
+                if (!labelPosition.Parent.IsReachableFrom(currentCodeBatch))
+                {
+                    throw CompilerException.ForbiddenLabelJump(identifier);
+                }
                 var index = scope.GetLabelPosition(identifier);
                 var currentIndex = AddCommand(OperationCode.Jmp, index);
             }
             else
             {
                 var currentIndex = AddCommand(OperationCode.Jmp, -1);
-                scope.RegisterForwardCall(identifier, currentIndex, lineNumber);
+                scope.RegisterForwardCall(identifier, new CodeBatchHierarchy(currentCodeBatch, lineNumber, currentIndex));
             }
 
             NextToken();
@@ -664,20 +673,26 @@ namespace ScriptEngine.Compiler
             var identifier = _lastExtractedLexem.Content;
             var lineNumber = _lastExtractedLexem.LineNumber;
             var scope = _ctx.Peek();
-            int registeredLineNumber;
-            if (scope.HasLabel(identifier, out registeredLineNumber))
+            CodeBatchHierarchy labelPosition;
+            if (scope.HasLabel(identifier, out labelPosition))
             {
-                throw CompilerException.LabelAlreadyRegistered(registeredLineNumber);
+                throw CompilerException.LabelAlreadyRegistered(labelPosition.LineNumber);
             }
 
             NextToken(); // пропускаем ":"
 
-            var index = AddCommand(OperationCode.Nop, 0); // Do we really need a Nop ??
-            scope.RegisterLabel(identifier, index, lineNumber);
+            var byteCodeIndex = _module.Code.Count == 0
+                ? AddCommand(OperationCode.Nop, 0)
+                : _module.Code.Count - 1;
+            scope.RegisterLabel(identifier, new CodeBatchHierarchy(currentCodeBatch, lineNumber, byteCodeIndex));
 
             foreach (var cmdIndex in scope.GetCallPositionsForLabel(identifier))
             {
-                _module.Code[cmdIndex] = new Command() { Code = OperationCode.Jmp, Argument = index };
+                if (!currentCodeBatch.IsReachableFrom(cmdIndex))
+                {
+                    throw CompilerException.ForbiddenLabelJump(identifier, cmdIndex.LineNumber);
+                }
+                _module.Code[cmdIndex.LineNumber] = new Command() { Code = OperationCode.Jmp, Argument = byteCodeIndex };
             }
             scope.ClearForwardCallsForLabel(identifier);
 
