@@ -62,13 +62,25 @@ namespace oscript
             }
             else if (param == "-make")
             {
-                var codepath = helper.Next();
+                var arg = helper.Next();
+                bool isPureCode = false;
+                if (arg == "-pure")
+                {
+                    isPureCode = true;
+                    arg = helper.Next();
+                }
+                var codepath = arg;
                 var output = helper.Next();
 
                 if (output != null && codepath != null)
                 {
-                    return new MakeAppBehavior(codepath, output);
+                    return new MakeAppBehavior(codepath, output, buildExecutable: !isPureCode);
                 }
+            }
+            else if (param == "-run")
+            {
+                var path = helper.Next();
+                return new ExecuteCompiledBehavior(path, helper.Tail());
             }
             else if (param == "-cgi")
             {

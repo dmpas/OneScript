@@ -110,6 +110,7 @@
     <Compile Include="DebugBehavior.cs" />
     <Compile Include="DebugServer\OscriptDebugController.cs" />
     <Compile Include="DoNothingHost.cs" />
+    <Compile Include="ExecuteCompiledBehavior.cs" />
     <Compile Include="ExecuteScriptBehavior.cs" />
     <Compile Include="MakeAppBehavior.cs" />
     <Compile Include="MeasureBehavior.cs" />

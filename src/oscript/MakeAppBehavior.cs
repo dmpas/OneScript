@@ -25,28 +25,41 @@ namespace oscript
 
 		private readonly string _exePath;
 
-		public MakeAppBehavior(string codePath, string exePath)
+		private readonly bool _buildExecutable;
+
+		public MakeAppBehavior(string codePath, string exePath, bool buildExecutable = true)
 		{
 			_codePath = codePath;
 			_exePath = exePath;
+			_buildExecutable = buildExecutable;
 		}
 
 		public override int Execute()
 		{
 			Output.WriteLine("Make started...");
 
-			CreateExe();
+			if (_buildExecutable)
+			{
+				using (var exeStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("oscript.StandaloneRunner.exe"))
+				{
+					WriteByteCode(exeStream);
+				}
+			}
+			else
+			{
+				WriteByteCode();
+			}
 
 			Output.WriteLine("Make completed");
 			return 0;
 		}
 
-		private void CreateExe()
+		private void WriteByteCode(Stream masterStream = null)
 		{
-			using (var exeStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("oscript.StandaloneRunner.exe"))
+			
 			using (var output = new MemoryStream())
 			{
-				exeStream?.CopyTo(output);
+				masterStream?.CopyTo(output);
 
 				var offset = (int)output.Length;
 
