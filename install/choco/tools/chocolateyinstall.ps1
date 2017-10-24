@@ -3,7 +3,7 @@
 $urltag = $version -replace '\.', '_'
 $packageName = 'onescript'
 $toolsDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
-$url = "http://oscript.io/downloads/$urltag/exe"
+$url = "http://oscript.io/downloads/$urltag/OneScript-$version-setup.exe"
 $url64 = ''
 
 $packageArgs = @{
@@ -17,8 +17,8 @@ $packageArgs = @{
   validExitCodes= @(0, 3010, 1641)
 
   registryUninstallerKey = 'onescript'
-  # 1.0.17 exe
-  checksum      = 'e5cd7c58bab04e4a8893fc4a7f1cc1f2e5870f929ba10e7518deb8928ba68348'
+  # 1.0.18 exe
+  checksum      = 'dbc49c92c933df69b90c41792e37d9221620821fe983eb149d71ab92593bdbb8'
   checksumType  = 'sha256'
   checksum64    = ''
   checksumType64= 'sha256'
