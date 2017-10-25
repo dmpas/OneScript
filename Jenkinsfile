@@ -4,7 +4,7 @@ pipeline {
     agent none
 
     environment {
-        ReleaseNumber = 18
+        ReleaseNumber = 19
         outputEnc = '65001'
     }
 
@@ -127,7 +127,7 @@ pipeline {
                     //unstash 'sitedoc'
                     bat "chcp $outputEnc > nul\r\n\"${tool 'MSBuild'}\" BuildAll.csproj /p:Configuration=Release /p:Platform=x86 /t:CreateZip;CreateInstall;CreateNuget"
                     archiveArtifacts artifacts: '**/dist/*.exe, **/dist/*.msi, **/dist/*.zip, **/dist/*.nupkg', fingerprint: true
-                    stash includes: 'dist/*.exe, **/dist/*.msi, **/dist/*.zip', name: 'winDist'
+                    stash includes: 'dist/*.exe, **/dist/*.msi, **/dist/*.zip, **/dist/*.nupkg', name: 'winDist'
                 }
             }
         }
@@ -165,10 +165,16 @@ pipeline {
         }
 
         stage ('Publishing night-build') {
-            when { branch 'develop' }
+            when { anyOf {
+				branch 'develop';
+				branch 'release/*'
+				}
+			}
+			
             agent { label 'master' }
 
             steps {
+                fileOperations([folderDeleteOperation('dist'), folderDeleteOperation('output'), folderDeleteOperation('vscode')])
                 unstash 'winDist'
                 unstash 'linDist'
                 unstash 'vsix'
@@ -180,6 +186,33 @@ pipeline {
                 sudo rsync -rv --delete install/build/vscode/*.vsix $TARGET
                 
                 '''.stripIndent()
+            }
+        }
+                
+                stage ('Publishing master') {
+            when { branch 'master' }
+                
+            agent { label 'master' }
+
+            steps {
+                fileOperations([folderDeleteOperation('dist'), folderDeleteOperation('output'), folderDeleteOperation('vscode')])
+                
+                unstash 'winDist'
+                unstash 'linDist'
+                unstash 'vsix'
+                
+                sh """
+                TARGET="/var/www/oscript.io/download/versions/latest/"
+                sudo rsync -rv --delete --exclude mddoc*.zip dist/* \$TARGET
+                sudo rsync -rv --delete --exclude *.src.rpm output/* \$TARGET
+                sudo rsync -rv --delete install/build/vscode/*.vsix \$TARGET
+
+                TARGET="/var/www/oscript.io/download/versions/1_0_$ReleaseNumber/"
+                sudo rsync -rv --delete --exclude mddoc*.zip dist/* \$TARGET
+                sudo rsync -rv --delete --exclude *.src.rpm output/* \$TARGET
+                sudo rsync -rv --delete install/build/vscode/*.vsix \$TARGET
+
+                """.stripIndent()
             }
         }
 

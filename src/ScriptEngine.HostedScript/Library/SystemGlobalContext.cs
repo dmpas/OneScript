@@ -82,7 +82,7 @@ namespace ScriptEngine.HostedScript.Library
         /// Выдает сообщение в консоль.
         /// </summary>
         /// <param name="message">Выдаваемое сообщение.</param>
-        /// <param name="status">Статус сообщения.</param>
+        /// <param name="status">Статус сообщения. В зависимости от статуса изменяется цвет вывода сообщения.</param>
         [ContextMethod("Сообщить", "Message")]
 		public void Echo(string message, MessageStatusEnum status = MessageStatusEnum.Ordinary)
         {
@@ -111,8 +111,9 @@ namespace ScriptEngine.HostedScript.Library
         /// </summary>
         /// <param name="code">Текст сценария</param>
         /// <param name="externalContext">Структура. Глобальные свойства, которые будут инжектированы в область видимости загружаемого скрипта. (Необязательный)</param>
-        /// <example>    Контекст = Новый Структура("ЧислоПи", 3.1415); // 4 знака хватит всем
-        ///    ЗагрузитьСценарийИзСтроки("Сообщить(ЧислоПи);", Контекст);</example>
+        /// <example>
+        /// Контекст = Новый Структура("ЧислоПи", 3.1415); // 4 знака хватит всем
+        /// ЗагрузитьСценарийИзСтроки("Сообщить(ЧислоПи);", Контекст);</example>
         [ContextMethod("ЗагрузитьСценарийИзСтроки", "LoadScriptFromString")]
         public IRuntimeContextInstance LoadScriptFromString(string code, StructureImpl externalContext = null)
         {
@@ -140,9 +141,10 @@ namespace ScriptEngine.HostedScript.Library
         /// </summary>
         /// <param name="path">Путь к подключаемому сценарию</param>
         /// <param name="externalContext">Структура. Глобальные свойства, которые будут инжектированы в область видимости загружаемого скрипта. (Необязательный)</param>
-        /// <example>    Контекст = Новый Структура("ЧислоПи", 3.1415); // 4 знака хватит	
-        ///    // В коде скрипта somescript.os будет доступна глобальная переменная "ЧислоПи"	
-        ///    Объект = ЗагрузитьСценарий("somescript.os", Контекст);</example>
+        /// <example>
+        /// Контекст = Новый Структура("ЧислоПи", 3.1415); // 4 знака хватит
+        /// // В коде скрипта somescript.os будет доступна глобальная переменная "ЧислоПи"
+        /// Объект = ЗагрузитьСценарий("somescript.os", Контекст);</example>
         [ContextMethod("ЗагрузитьСценарий", "LoadScript")]
         public IRuntimeContextInstance LoadScript(string path, StructureImpl externalContext = null)
         {
@@ -352,6 +354,7 @@ namespace ScriptEngine.HostedScript.Library
         /// <param name="redirectOutput">Перехватывать стандартные потоки stdout и stderr</param>
         /// <param name="redirectInput">Перехватывать стандартный поток stdin</param>
         /// <param name="encoding">Кодировка стандартных потоков вывода и ошибок</param>
+        /// <param name="env">Соответствие, где установлены значения переменных среды</param>
         [ContextMethod("СоздатьПроцесс", "CreateProcess")]
         public ProcessContext CreateProcess(string cmdLine, string currentDir = null, bool redirectOutput = false, bool redirectInput = false, IValue encoding = null, MapImpl env = null)
         {
@@ -456,6 +459,10 @@ namespace ScriptEngine.HostedScript.Library
             {
                 var emptyDate = new DateTime(1, 1, 1, 0, 0, 0);
                 return value.AsDate() != emptyDate;
+            }
+            else if (value.GetRawValue() is COMWrapperContext)
+            {
+                return true;
             }
             else if (value.GetRawValue() is ICollectionContext)
             {
