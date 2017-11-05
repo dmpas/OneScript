@@ -39,10 +39,23 @@ namespace ScriptEngine.Machine.Contexts
 
         public static COMWrapperContext Create(string progId, IValue[] arguments)
         {
-            var type = FindTypeByName(progId);
+            Type type = null;
+            try
+            {
+                type = Type.GetTypeFromProgID(progId, throwOnError: false);
+            }
+            catch (NotImplementedException)
+            {
+                // В Mono GetTypeFromProgID бросает такое исключение.
+            }
             if (type == null)
             {
-                type = Type.GetTypeFromProgID(progId, throwOnError: true);
+                type = FindTypeByName(progId);
+            }
+
+            if (type == null)
+            {
+                throw new TypeLoadException(String.Format("Тип {0} не найден!", progId));
             }
 
             if (type.IsGenericType)
