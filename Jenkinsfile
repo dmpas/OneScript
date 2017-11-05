@@ -4,7 +4,7 @@ pipeline {
     agent none
 
     environment {
-        ReleaseNumber = 18
+        ReleaseNumber = 19
         outputEnc = '65001'
     }
 
@@ -68,9 +68,9 @@ pipeline {
                 ws("$workspace".replaceAll("%", "_"))
                 {
                     dir('install/build'){
-						deleteDir()
-					}
-					unstash 'buildResults'
+                        deleteDir()
+                    }
+                    unstash 'buildResults'
                     bat "chcp $outputEnc > nul\r\n\"${tool 'MSBuild'}\" BuildAll.csproj /p:Configuration=Release /p:Platform=x86 /t:xUnitTest"
 
                     junit 'tests/tests.xml'
@@ -84,11 +84,11 @@ pipeline {
 
             steps {
                 
-				dir('install/build'){
-					deleteDir()
-				}
-				
-				unstash 'buildResults'
+                dir('install/build'){
+                    deleteDir()
+                }
+                
+                unstash 'buildResults'
 
                 sh '''\
                 if [ ! -d lintests ]; then
@@ -121,13 +121,18 @@ pipeline {
                 ws("$workspace".replaceAll("%", "_"))
                 {
                     dir('install/build'){
-						deleteDir()
-					}
-					unstash 'buildResults'
+                        deleteDir()
+                    }
+                    
+                    dir('dist'){
+                        deleteDir()
+                    }
+                    
+                    unstash 'buildResults'
                     //unstash 'sitedoc'
                     bat "chcp $outputEnc > nul\r\n\"${tool 'MSBuild'}\" BuildAll.csproj /p:Configuration=Release /p:Platform=x86 /t:CreateZip;CreateInstall;CreateNuget"
                     archiveArtifacts artifacts: '**/dist/*.exe, **/dist/*.msi, **/dist/*.zip, **/dist/*.nupkg', fingerprint: true
-                    stash includes: 'dist/*.exe, **/dist/*.msi, **/dist/*.zip', name: 'winDist'
+                    stash includes: 'dist/*.exe, **/dist/*.msi, **/dist/*.zip, **/dist/*.nupkg', name: 'winDist'
                 }
             }
         }
@@ -138,9 +143,9 @@ pipeline {
             steps {
 
                 dir('install/build'){
-					deleteDir()
-				}
-				checkout scm
+                    deleteDir()
+                }
+                checkout scm
                 unstash 'buildResults'
 
                 sh '''
@@ -165,21 +170,61 @@ pipeline {
         }
 
         stage ('Publishing night-build') {
-            when { branch 'develop' }
+            when { anyOf {
+				branch 'develop';
+				branch 'release/*'
+				}
+			}
+			
             agent { label 'master' }
 
             steps {
+                
                 unstash 'winDist'
                 unstash 'linDist'
                 unstash 'vsix'
                 
                 sh '''
+                if [ -d "targetContent" ]; then
+                    rm -rf targetContent
+                fi
+                mkdir targetContent
+                mv dist/* targetContent/
+                mv output/*.rpm targetContent/
+                mv install/build/vscode/*.vsix targetContent/
+
                 TARGET="/var/www/oscript.io/download/versions/night-build/"
-                sudo rsync -rv --delete --exclude mddoc*.zip dist/* $TARGET
-                sudo rsync -rv --delete --exclude *.src.rpm output/* $TARGET
-                sudo rsync -rv --delete install/build/vscode/*.vsix $TARGET
-                
+
+                cd targetContent
+                sudo rsync -rv --delete --exclude mddoc*.zip --exclude *.src.rpm . $TARGET
+                rm -rf targetContent
                 '''.stripIndent()
+            }
+        }
+                
+                stage ('Publishing master') {
+            when { branch 'master' }
+                
+            agent { label 'master' }
+
+            steps {
+                
+                unstash 'winDist'
+                unstash 'linDist'
+                unstash 'vsix'
+                
+                sh """
+                TARGET="/var/www/oscript.io/download/versions/latest/"
+                sudo rsync -rv --delete --exclude mddoc*.zip dist/* \$TARGET
+                sudo rsync -rv --delete --exclude *.src.rpm output/* \$TARGET
+                sudo rsync -rv --delete install/build/vscode/*.vsix \$TARGET
+
+                TARGET="/var/www/oscript.io/download/versions/1_0_$ReleaseNumber/"
+                sudo rsync -rv --delete --exclude mddoc*.zip dist/* \$TARGET
+                sudo rsync -rv --delete --exclude *.src.rpm output/* \$TARGET
+                sudo rsync -rv --delete install/build/vscode/*.vsix \$TARGET
+
+                """.stripIndent()
             }
         }
 
