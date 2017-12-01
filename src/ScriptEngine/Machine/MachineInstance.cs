@@ -45,6 +45,7 @@ namespace ScriptEngine.Machine
         {
             public int handlerAddress;
             public ExecutionFrame handlerFrame;
+            public int stackSize;
         }
         
         public void AttachContext(IAttachableContext context, bool detachable)
@@ -149,6 +150,24 @@ namespace ScriptEngine.Machine
             
             return true;
         }
+        
+        public bool RemoveBreakpoint(string source, int line, out int id)
+        {
+            if (_stopManager == null)
+                throw new InvalidOperationException("Machine is not in debug mode");
+
+            id = _stopManager.RemoveBreakpoint(source, line);
+
+            return id >= 0;
+        }
+
+        public void SetBreakpointsForModule(string source, int[] lines)
+        {
+            if (_stopManager == null)
+                throw new InvalidOperationException("Machine is not in debug mode");
+
+            _stopManager.Breakpoints.SetAllForModule(source, lines);
+        }
 
         public void StepOver()
         {
@@ -178,8 +197,8 @@ namespace ScriptEngine.Machine
         {
             if (_stopManager == null)
                 throw new InvalidOperationException("Machine is not in debug mode");
-            // ??
-            //_stopManager.ClearSteppingStops();
+
+            _stopManager.Continue();
         }
 
         public IValue Evaluate(string expression, bool separate = false)
@@ -400,6 +419,12 @@ namespace ScriptEngine.Machine
 
                     _currentFrame.InstructionPointer = handler.handlerAddress;
                     _currentFrame.LastException = exc;
+
+                    // При возникновении исключения посредине выражения
+                    // некому почистить стек операндов.
+                    // Сделаем это
+                    while (_operationStack.Count > handler.stackSize)
+                        _operationStack.Pop();
                     
 
                 }
@@ -1379,6 +1404,7 @@ namespace ScriptEngine.Machine
             var info = new ExceptionJumpInfo();
             info.handlerAddress = exceptBlockAddress;
             info.handlerFrame = _currentFrame;
+            info.stackSize = _operationStack.Count;
 
             _exceptionsStack.Push(info);
             NextInstruction();
