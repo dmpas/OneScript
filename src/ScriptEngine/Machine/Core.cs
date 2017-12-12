@@ -185,6 +185,8 @@ namespace ScriptEngine.Machine
         public string Name;
         public string Alias;
         public bool IsFunction;
+        public bool IsDeprecated;
+        public bool ThrowOnUseDeprecated;
         public ParameterDefinition[] Params;
 
         public int ArgCount
@@ -205,6 +207,11 @@ namespace ScriptEngine.Machine
         public int DefaultValueIndex;
 
         public const int UNDEFINED_VALUE_INDEX = -1;
+
+        public bool IsDefaultValueDefined()
+        {
+            return HasDefaultValue && DefaultValueIndex != UNDEFINED_VALUE_INDEX;
+        }
     }
 
     public struct TypeDescriptor : IEquatable<TypeDescriptor>
@@ -253,6 +260,7 @@ namespace ScriptEngine.Machine
     {
         public int Index;
         public string Identifier;
+        public string Alias;
         public SymbolType Type;
     }
 
