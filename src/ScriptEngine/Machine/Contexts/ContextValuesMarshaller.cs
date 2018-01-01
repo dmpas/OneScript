@@ -87,6 +87,10 @@ namespace ScriptEngine.Machine.Contexts
             {
                 valueObj = value.AsObject();
             }
+            else if (type.IsInterface)
+            {
+                valueObj = value.AsObject();
+            }
             else
             {
                 valueObj = CastToCLRObject(value);
@@ -155,6 +159,9 @@ namespace ScriptEngine.Machine.Contexts
                     return ValueFactory.Create((IRuntimeContextInstance)objParam);
                 else
                     return ValueFactory.Create();
+            } else if (type.IsInterface && objParam is IRuntimeContextInstance)
+            {
+                return ValueFactory.Create((IRuntimeContextInstance) objParam);
             }
             else
             {
