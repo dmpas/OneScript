@@ -10,6 +10,6 @@ matrix:
 
 solution: src/1Script_Mono.sln
 script:
-    - install/build.sh
+    - install/build.sh /p:Platfrom="x86"
     - echo "lib.system=${PWD}/oscript-library/src" > src/oscript/bin/Release/oscript.cfg
     - ./travis-runtests.sh src/oscript/bin/Release/
