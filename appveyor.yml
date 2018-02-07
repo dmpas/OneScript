@@ -17,7 +17,8 @@ init:
 - ps: Start-Sleep -s 5
 - ps: Restart-Computer
 install:
-- cmd: git submodule update --init --recursive
+- cmd: choco install onescript.cli -Source http://myget.org/F/onescript -y
+- cmd: opm install opm
 before_build:
 - nuget restore src/1Script_Mono.sln
 build:
@@ -25,6 +26,8 @@ build:
   publish_nuget: false
   verbosity: minimal
 test_script:
+- cmd: opm install -l asserts
+- cmd: opm install -l logos
 - cmd: appveyor-runtests.cmd
 after_build:
 - 7z a oscript.zip %APPVEYOR_BUILD_FOLDER%/src/oscript/bin/x86/Release/net452/*.dll
