@@ -1,5 +1,5 @@
 chcp 65001
-echo lib.system=%APPVEYOR_BUILD_FOLDER% > src\oscript\bin\x86\Release\net452\oscript.cfg
+echo lib.system=%APPVEYOR_BUILD_FOLDER%\oscript_modules > src\oscript\bin\x86\Release\net452\oscript.cfg
 cd tests
 ..\src\oscript\bin\x86\Release\net452\oscript.exe testrunner.os -runall .
 
