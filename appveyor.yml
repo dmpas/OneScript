@@ -18,6 +18,7 @@ init:
 - ps: Restart-Computer
 install:
 - cmd: choco install onescript.cli -Source http://myget.org/F/onescript -y
+- cmd: refreshenv
 - cmd: opm install opm
 before_build:
 - nuget restore src/1Script_Mono.sln
