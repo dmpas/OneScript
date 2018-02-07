@@ -11,7 +11,7 @@ matrix:
 dotnet: 2.0.0
 solution: src/1Script_Mono.sln
 script:
-    - dotnet restore src/1Script_Mono.sln
+    - dotnet restore src/1Script_Mono.sln /p:Configuration=Release /p:Platform=x86
     - install/build.sh /p:Platfrom="x86"
     - echo "lib.system=${PWD}/oscript-library/src" > src/oscript/bin/Release/oscript.cfg
     - ./travis-runtests.sh src/oscript/bin/Release/
