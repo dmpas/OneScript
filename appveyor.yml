@@ -22,7 +22,7 @@ before_build:
 - nuget restore src/1Script_Mono.sln
 build:
   project: src/1Script_Mono.sln
-  publish_nuget: true
+  publish_nuget: false
   verbosity: minimal
 test_script:
 - cmd: appveyor-runtests.cmd
