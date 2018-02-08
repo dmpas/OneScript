@@ -13,7 +13,11 @@ solution: src/1Script_Mono.sln
 install:
     - dotnet restore ${TRAVIS_SOLUTION} /p:Configuration=Release /p:Platform=x86
     - nuget restore ${TRAVIS_SOLUTION}
+    - wget oscript.io/Downloads/latest/deb && dpkg -i deb
+    - opm install oscript-config
+    - opm install logos
+    - opm install asserts
 script:
     - msbuild ${TRAVIS_SOLUTION} /p:Configuration="Release" /p:Platform="x86"
-    - echo "lib.system=${PWD}/oscript-library/src" > src/oscript/bin/Release/net452/oscript.cfg
-    - ./travis-runtests.sh src/oscript/bin/Release/net452
+    - echo "lib.system=${PWD}/oscript-library/src" > src/oscript/bin/x86/Release/net452/oscript.cfg
+    - ./travis-runtests.sh src/oscript/bin/x86/Release/net452
