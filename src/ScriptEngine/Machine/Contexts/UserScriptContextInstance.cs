@@ -26,6 +26,7 @@ namespace ScriptEngine.Machine.Contexts
         internal UserScriptContextInstance(LoadedModule module) : base(module)
         {
             _module = module;
+            ConstructorParams = new IValue[0];
         }
 
         internal UserScriptContextInstance(LoadedModule module, string asObjectOfType, IValue[] args = null)
@@ -154,7 +155,7 @@ namespace ScriptEngine.Machine.Contexts
         
         public override int GetMethodsCount()
         {
-            return _module.ExportedMethods.Length;
+            return _module.Methods.Length;
         }
         
     }
