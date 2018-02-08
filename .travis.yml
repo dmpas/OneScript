@@ -20,5 +20,5 @@ install:
     - nuget restore ${TRAVIS_SOLUTION}
 script:
     - msbuild ${TRAVIS_SOLUTION} /p:Configuration="Release" /p:Platform="x86"
-    - echo "lib.system=${PWD}/oscript-library/src" > src/oscript/bin/x86/Release/net452/oscript.cfg
+    - echo "lib.system=`oscript-config get lib.system`" > src/oscript/bin/x86/Release/net452/oscript.cfg
     - ./travis-runtests.sh src/oscript/bin/x86/Release/net452
