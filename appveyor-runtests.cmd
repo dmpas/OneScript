@@ -1,5 +1,6 @@
 chcp 65001
 echo lib.system= > src\oscript\bin\x86\Release\net452\oscript.cfg
+
 cd tests
 ..\src\oscript\bin\x86\Release\net452\oscript.exe testrunner.os -runall .
 
