@@ -1,14 +1,5 @@
 language: csharp
 sudo: required
-os:
-    - linux
-    - osx
-
-# OS-X поддерживать некому
-matrix:
-    allow_failures:
-        os: osx
-
 dotnet: 2.0.0
 solution: src/1Script_Mono.sln
 install:
