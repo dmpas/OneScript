@@ -33,7 +33,7 @@ test_script:
 
     opm install -l logos
 
-    <nul set /p str="lib.system="
+    <nul set /p str="lib.system=" > src/oscript/bin/x86/Release/net452/oscript.cfg
 
     oscript-config get lib.system >> src/oscript/bin/x86/Release/net452/oscript.cfg
 
