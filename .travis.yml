@@ -14,6 +14,6 @@ install:
     - dotnet restore ${TRAVIS_SOLUTION} /p:Configuration=Release /p:Platform=x86
     - nuget restore ${TRAVIS_SOLUTION}
 script:
-    - install/build.sh /p:Platfrom="x86"
+    - msbuild ${TRAVIS_SOLUTION} /p:Configuration="Release" /p:Platfrom="x86"
     - echo "lib.system=${PWD}/oscript-library/src" > src/oscript/bin/Release/net452/oscript.cfg
     - ./travis-runtests.sh src/oscript/bin/Release/net452
