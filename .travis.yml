@@ -12,7 +12,7 @@ dotnet: 2.0.0
 solution: src/1Script_Mono.sln
 install:
     - dotnet restore ${TRAVIS_SOLUTION} /p:Configuration=Release /p:Platform=x86
-    - nuget restore ${TRAVIS_SOLUTION} /p:Configuration=Release /p:Platform=x86
+    - nuget restore
 script:
     - install/build.sh /p:Platfrom="x86"
     - echo "lib.system=${PWD}/oscript-library/src" > src/oscript/bin/Release/net452/oscript.cfg
