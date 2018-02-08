@@ -18,8 +18,9 @@ init:
 - ps: Restart-Computer
 install:
 - cmd: choco install onescript.cli -Source http://myget.org/F/onescript -y
-- cmd: refreshenv
 - cmd: opm install opm
+- cmd: opm install oscript-config
+- cmd: refreshenv
 before_build:
 - nuget restore src/1Script_Mono.sln
 build:
@@ -27,8 +28,15 @@ build:
   publish_nuget: false
   verbosity: minimal
 test_script:
-- cmd: opm install -l asserts
-- cmd: opm install -l logos
+- cmd: >-
+opm install -l asserts
+
+opm install -l logos
+
+<nul set /p str="lib.system="
+
+oscript-config get lib.system >> src/oscript/bin/x86/Release/net452/oscript.cfg
+
 - cmd: appveyor-runtests.cmd
 after_build:
 - 7z a oscript.zip %APPVEYOR_BUILD_FOLDER%/src/oscript/bin/x86/Release/net452/*.dll
