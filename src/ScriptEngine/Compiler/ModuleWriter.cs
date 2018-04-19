@@ -23,20 +23,23 @@ namespace ScriptEngine.Compiler
 
         public void Write(TextWriter output, ICodeSource source)
         {
-            var module = _compiler.CreateModule(source).Module;
+            var module = _compiler.Compile(source);
 
             WriteImage(output, module);
 
         }
 
-        public void Write(TextWriter output, ScriptModuleHandle module)
+        public void Write(TextWriter output, ModuleImage module)
         {
-            WriteImage(output, module.Module);
+            WriteImage(output, module);
         }
 
         private void WriteImage(TextWriter output, ModuleImage module)
         {
-            output.WriteLine(".variableFrame:" + module.VariableFrameSize.ToString());
+            output.WriteLine(".loadAt: {0}", module.LoadAddress);
+            output.WriteLine(".variableFrame:");
+            module.Variables.ForEach(x=>output.WriteLine(" " + x));
+
             output.WriteLine(".constants");
             for (int i = 0; i < module.Constants.Count; i++)
             {
@@ -82,22 +85,47 @@ namespace ScriptEngine.Compiler
             }
         }
 
+        private void WriteAnnotationsList(TextWriter output, AnnotationDefinition[] annotations)
+        {
+            output.WriteLine(".annotations [");
+            foreach (var annotation in annotations)
+            {
+                output.Write(" {0}", annotation.Name);
+                if (annotation.ParamCount != 0)
+                {
+                    var delimiter = ": ";
+                    foreach (var parameter in annotation.Parameters)
+                    {
+                        output.Write(delimiter);
+                        output.Write(parameter);
+                        delimiter = ", ";
+                    }
+                }
+                output.WriteLine("");
+            }
+            output.WriteLine("]");
+        }
+
         private void WriteMethodDefinition(TextWriter output, MethodDescriptor item)
         {
             output.Write(item.Signature.IsFunction ? "Func " : "Proc ");
             output.Write(string.Format("{0} entryPoint: {1}, frameSize:{2}\n",
                 item.Signature.Name,
                 item.EntryPoint,
-                item.VariableFrameSize));
-            output.Write(string.Format(".args {0}\n", item.Signature.ArgCount));
+                item.Variables.Count));
+            if (item.Signature.AnnotationsCount != 0)
+            {
+                WriteAnnotationsList(output, item.Signature.Annotations);
+            }
+            output.Write(".args {0}\n", item.Signature.ArgCount);
             if (item.Signature.Params != null)
             {
                 for (int i = 0; i < item.Signature.Params.Length; i++)
                 {
-                    output.Write(string.Format("{0,-3}: ByVal={1}", i, item.Signature.Params[i].IsByValue.ToString()));
+                    output.Write("{0,-3}: ByVal={1}", i, item.Signature.Params[i].IsByValue);
                     if (item.Signature.Params[i].HasDefaultValue)
                     {
-                        output.Write(string.Format(" defValue: {0}\n", item.Signature.Params[i].DefaultValueIndex));
+                        output.Write(" defValue: {0}\n", item.Signature.Params[i].DefaultValueIndex);
                     }
                     else
                     {
@@ -105,6 +133,9 @@ namespace ScriptEngine.Compiler
                     }
                 }
             }
+            output.WriteLine(".variables [");
+            item.Variables.ForEach(x=>output.WriteLine(" " + x));
+            output.WriteLine("]");
         }
 
         private void WriteExports(TextWriter output, IList<ExportedSymbol> exports)

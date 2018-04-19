@@ -52,6 +52,7 @@ namespace ScriptEngine.HostedScript.Library.Binary
             }
         }
 
+
         public byte[] Buffer
         {
             get
@@ -77,7 +78,7 @@ namespace ScriptEngine.HostedScript.Library.Binary
             return new GenericStream(stream);
         }
 
-        [ScriptConstructor(Name="На основании файла")]
+        [ScriptConstructor(Name = "На основании файла")]
         public static BinaryDataContext Constructor(IValue filename)
         {
             return new BinaryDataContext(filename.AsString());

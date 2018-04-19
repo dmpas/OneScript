@@ -12,13 +12,21 @@ using ScriptEngine.Machine;
 
 namespace ScriptEngine.Compiler
 {
-    partial class Compiler
+    [Flags]
+    public enum CodeGenerationFlags
     {
+        Always,
+        CodeStatistics,
+        DebugCode
+    }
+
+    class Compiler    {
         private static readonly Dictionary<Token, OperationCode> _tokenToOpCode;
 
         private Parser _parser;
         private ICompilerContext _ctx;
         private ModuleImage _module;
+        private Lexem _previousExtractedLexem;
         private Lexem _lastExtractedLexem;
         private bool _inMethodScope = false;
         private bool _isMethodsDefined = false;
@@ -29,6 +37,7 @@ namespace ScriptEngine.Compiler
         private readonly Stack<Token[]> _tokenStack = new Stack<Token[]>();
         private readonly Stack<NestedLoopInfo> _nestedLoops = new Stack<NestedLoopInfo>();
         private readonly List<ForwardedMethodDecl> _forwardedMethods = new List<ForwardedMethodDecl>();
+        private readonly List<AnnotationDefinition> _annotations = new List<AnnotationDefinition>();
 
         private struct ForwardedMethodDecl
         {
@@ -55,17 +64,13 @@ namespace ScriptEngine.Compiler
         }
 
         public CompilerDirectiveHandler DirectiveHandler { get; set; }
-
-        public Compiler()
-        {
-            
-        }
-
-        public bool ProduceExtraCode { get; set; }
+    
+        public CodeGenerationFlags ProduceExtraCode { get; set; }
 
         public ModuleImage Compile(Parser parser, ICompilerContext context)
         {
             _module = new ModuleImage();
+            _module.LoadAddress = context.TopIndex();
             _ctx = context;
             _parser = parser;
             _parser.Start();
@@ -74,6 +79,102 @@ namespace ScriptEngine.Compiler
             CheckForwardedDeclarations();
 
             return _module;
+        }
+
+        public ModuleImage CompileExpression(Parser parser, ICompilerContext context)
+        {
+            _module = new ModuleImage();
+            _module.LoadAddress = context.TopIndex();
+            _ctx = context;
+            _parser = parser;
+            _parser.Start();
+            NextToken();
+            BuildExpression(Token.EndOfText);
+
+            return _module;
+        }
+
+        public ModuleImage CompileExecBatch(Parser parser, ICompilerContext context)
+        {
+            _module = new ModuleImage();
+            _module.LoadAddress = context.TopIndex();
+            _ctx = context;
+            _parser = parser;
+            _parser.Start();
+            NextToken();
+            PushStructureToken(Token.EndOfText);
+            BuildModuleBody();
+
+            return _module;
+        }
+
+        private AnnotationParameter BuildAnnotationParameter()
+        {
+            // id | id = value | value
+            var result = new AnnotationParameter();
+            if (_lastExtractedLexem.Type == LexemType.Identifier)
+            {
+                result.Name = _lastExtractedLexem.Content;
+                NextToken();
+                if (_lastExtractedLexem.Token != Token.Equal)
+                {
+                    result.ValueIndex = AnnotationParameter.UNDEFINED_VALUE_INDEX;
+                    return result;
+                }
+                NextToken();
+            }
+            
+            var cDef = CreateConstDefinition(ref _lastExtractedLexem);
+            result.ValueIndex = GetConstNumber(ref cDef);
+            
+            NextToken();
+            
+            return result;
+        }
+
+        private IList<AnnotationParameter> BuildAnnotationParameters()
+        {
+            var parameters = new List<AnnotationParameter>();
+            while (_lastExtractedLexem.Token != Token.EndOfText)
+            {
+                parameters.Add(BuildAnnotationParameter());
+                if (_lastExtractedLexem.Token == Token.Comma)
+                {
+                    NextToken();
+                    continue;
+                }
+                if (_lastExtractedLexem.Token == Token.ClosePar)
+                {
+                    NextToken();
+                    break;
+                }
+                throw CompilerException.UnexpectedOperation();
+            }
+            return parameters;
+        }
+
+        private void BuildAnnotations()
+        {
+            while (_lastExtractedLexem.Type == LexemType.Annotation)
+            {
+                var annotation = new AnnotationDefinition() {Name = _lastExtractedLexem.Content};
+
+                NextToken();
+                if (_lastExtractedLexem.Token == Token.OpenPar)
+                {
+                    NextToken();
+                    annotation.Parameters = BuildAnnotationParameters().ToArray();
+                }
+                
+                _annotations.Add(annotation);
+            }
+        }
+
+        private AnnotationDefinition[] ExtractAnnotations()
+        {
+            var result = _annotations.ToArray();
+            _annotations.Clear();
+            return result;
         }
 
         private void BuildModule()
@@ -182,6 +283,10 @@ namespace ScriptEngine.Compiler
                     HandleDirective(isCodeEntered);
                     UpdateCompositeContext(); // костыль для #330
                 }
+                else if (_lastExtractedLexem.Type == LexemType.Annotation)
+                {
+                    BuildAnnotations();
+                }
                 else
                 {
                     throw CompilerException.UnexpectedOperation();
@@ -207,6 +312,7 @@ namespace ScriptEngine.Compiler
                     if (IsUserSymbol(ref _lastExtractedLexem))
                     {
                         var symbolicName = _lastExtractedLexem.Content;
+                        var annotations = ExtractAnnotations();
                         var definition = _ctx.DefineVariable(symbolicName);
                         if (_inMethodScope)
                         {
@@ -223,7 +329,14 @@ namespace ScriptEngine.Compiler
                             }
 
                             _module.VariableRefs.Add(definition);
-                            _module.VariableFrameSize++;
+                            _module.Variables.Add(new VariableInfo()
+                            {
+                                Identifier = symbolicName,
+                                Annotations = annotations,
+                                CanGet = true,
+                                CanSet = true,
+                                Index = definition.CodeIndex
+                            });
                         }
                         NextToken();
                         if (_lastExtractedLexem.Token == Token.Export)
@@ -286,8 +399,8 @@ namespace ScriptEngine.Compiler
                 var descriptor = new MethodDescriptor();
                 descriptor.EntryPoint = entry;
                 descriptor.Signature = bodyMethod;
-                descriptor.VariableFrameSize = localCtx.VariableCount;
-                
+                FillVariablesFrame(ref descriptor, localCtx);
+
                 var entryRefNumber = _module.MethodRefs.Count;
                 var bodyBinding = new SymbolBinding()
                 {
@@ -298,6 +411,17 @@ namespace ScriptEngine.Compiler
                 _module.MethodRefs.Add(bodyBinding);
                 _module.EntryMethodIndex = entryRefNumber;
             }
+        }
+
+        private static void FillVariablesFrame(ref MethodDescriptor descriptor, SymbolScope localCtx)
+        {
+            descriptor.Variables = new VariablesFrame();
+
+            for (int i = 0; i < localCtx.VariableCount; i++)
+            {
+                descriptor.Variables.Add(localCtx.GetVariable(i));
+            }
+            
         }
 
         private void HandleDirective(bool codeEntered)
@@ -314,7 +438,7 @@ namespace ScriptEngine.Compiler
         private void BuildSingleMethod()
         {
             var entryPoint = _module.Code.Count;
-            AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, isExtraCode: true);
+            AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics);
 
             if (_lastExtractedLexem.Token == Token.Procedure)
             {
@@ -351,6 +475,7 @@ namespace ScriptEngine.Compiler
             MethodInfo method = new MethodInfo();
             method.Name = _lastExtractedLexem.Content;
             method.IsFunction = _isFunctionProcessed;
+            method.Annotations = ExtractAnnotations();
 
             NextToken();
             if (_lastExtractedLexem.Token != Token.OpenPar)
@@ -359,83 +484,24 @@ namespace ScriptEngine.Compiler
             } 
             #endregion
             
-            NextToken();
-
             #region Parameters list
             var paramsList = new List<ParameterDefinition>();
             var methodCtx = new SymbolScope();
 
-            while (_lastExtractedLexem.Token != Token.ClosePar)
-            {
-                var param = new ParameterDefinition();
-                string name;
-
-                if (_lastExtractedLexem.Token == Token.ByValParam)
-                {
-                    param.IsByValue = true;
-                    NextToken();
-                    if (IsUserSymbol(ref _lastExtractedLexem))
-                    {
-                        name = _lastExtractedLexem.Content;
-                    }
-                    else
-                    {
-                        throw CompilerException.IdentifierExpected();
-                    }
-                }
-                else if (IsUserSymbol(ref _lastExtractedLexem))
-                {
-                    param.IsByValue = false;
-                    name = _lastExtractedLexem.Content;
-                }
-                else
-                {
-                    throw CompilerException.UnexpectedOperation();
-                }
-
-                NextToken();
-                if (_lastExtractedLexem.Token == Token.Equal)
-                {
-                    param.HasDefaultValue = true;
-                    NextToken();
-                    if (IsLiteral(ref _lastExtractedLexem))
-                    {
-                        var cd = CreateConstDefinition(ref _lastExtractedLexem);
-                        var num = GetConstNumber(ref cd);
-                        param.DefaultValueIndex = num;
-                        NextToken();
-                    }
-                    else
-                    {
-                        throw CompilerException.UnexpectedOperation();
-                    }
-                }
-
-                if (_lastExtractedLexem.Token == Token.Comma || _lastExtractedLexem.Token == Token.ClosePar)
-                {
-                    paramsList.Add(param);
-                    methodCtx.DefineVariable(name);
-                    
-                    if(_lastExtractedLexem.Token != Token.ClosePar)
-                        NextToken();
-                }
-                else
-                {
-                    throw CompilerException.TokenExpected(Token.Comma);
-                }
-            }
+            BuildMethodParametersList(paramsList, methodCtx);
 
             method.Params = paramsList.ToArray();
  
             #endregion
-
-            NextToken();
+            
             bool isExportedMethod = false;
             if (_lastExtractedLexem.Token == Token.Export)
             {
                 isExportedMethod = true;
                 NextToken();
             }
+
+            method.IsExport = isExportedMethod;
 
             #region Body
             // тело
@@ -455,7 +521,8 @@ namespace ScriptEngine.Compiler
             var descriptor = new MethodDescriptor();
             descriptor.EntryPoint = entryPoint;
             descriptor.Signature = method;
-            descriptor.VariableFrameSize = methodCtx.VariableCount;
+            FillVariablesFrame(ref descriptor, methodCtx);
+
             SymbolBinding binding;
             try
             {
@@ -471,6 +538,7 @@ namespace ScriptEngine.Compiler
             _module.MethodRefs.Add(binding);
             _module.Methods.Add(descriptor);
 
+            // TODO: deprecate?
             if (isExportedMethod)
             {
                 _module.ExportedMethods.Add(new ExportedSymbol()
@@ -484,6 +552,89 @@ namespace ScriptEngine.Compiler
 
             NextToken(); 
             
+        }
+
+        private void BuildMethodParametersList(List<ParameterDefinition> paramsList, SymbolScope methodCtx)
+        {
+            NextToken(); // (
+            while (_lastExtractedLexem.Token != Token.ClosePar)
+            {
+                // [Знач] Идентификатор[= Литерал][,[Знач] Идентификатор[= Литерал]]
+                var param = BuildParameterDefinition();
+
+                if (_lastExtractedLexem.Token == Token.Comma)
+                {
+                    paramsList.Add(param);
+                    methodCtx.DefineVariable(param.Name);
+                    NextToken();
+
+                    if (_lastExtractedLexem.Token == Token.ClosePar) // сразу после запятой не можем выйти из цикла, т.к. ждем в этом месте параметр
+                    {
+                        throw CompilerException.IdentifierExpected();
+                    }
+
+                    continue;
+                }
+                
+                paramsList.Add(param);
+                methodCtx.DefineVariable(param.Name);
+            }
+            
+            NextToken(); // )
+        }
+
+        private ParameterDefinition BuildParameterDefinition()
+        {
+            var param = new ParameterDefinition();
+            
+            if (_lastExtractedLexem.Type == LexemType.Annotation)
+            {
+                BuildAnnotations();
+                param.Annotations = ExtractAnnotations();
+            }
+            
+            if (_lastExtractedLexem.Token == Token.ByValParam)
+            {
+                param.IsByValue = true;
+                NextToken();
+                if (IsUserSymbol(ref _lastExtractedLexem))
+                {
+                    param.Name = _lastExtractedLexem.Content;
+                }
+                else
+                {
+                    throw CompilerException.IdentifierExpected();
+                }
+            }
+            else if (IsUserSymbol(ref _lastExtractedLexem))
+            {
+                param.IsByValue = false;
+                param.Name = _lastExtractedLexem.Content;
+            }
+            else
+            {
+                throw CompilerException.IdentifierExpected();
+            }
+
+            NextToken();
+            if (_lastExtractedLexem.Token == Token.Equal)
+            {
+                param.HasDefaultValue = true;
+                NextToken();
+                if (IsLiteral(ref _lastExtractedLexem))
+                {
+                    var cd = CreateConstDefinition(ref _lastExtractedLexem);
+                    var num = GetConstNumber(ref cd);
+                    param.DefaultValueIndex = num;
+                    NextToken();
+                }
+                else
+                {
+                    throw CompilerException.UnexpectedOperation();
+                }
+            }
+
+            return param;
         }
 
         private void DispatchMethodBody()
@@ -513,7 +664,7 @@ namespace ScriptEngine.Compiler
             if (_lastExtractedLexem.Token == Token.EndProcedure
                 || _lastExtractedLexem.Token == Token.EndFunction)
             {
-                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, isExtraCode: true);
+                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics|CodeGenerationFlags.DebugCode);
             }
 
             AddCommand(OperationCode.Return, 0);
@@ -565,26 +716,19 @@ namespace ScriptEngine.Compiler
 
                 if (_lastExtractedLexem.Token != Token.Semicolon)
                 {
-                    if (endTokens.Contains(_lastExtractedLexem.Token))
+                    if (endTokens.Contains(_lastExtractedLexem.Token) || LanguageDef.IsEndOfBlockToken(_lastExtractedLexem.Token))
                     {
                         break;
                     }
-                    else
-                    {
-                        throw CompilerException.SemicolonExpected();
-                    }
+                    throw CompilerException.SemicolonExpected();
                 }
-                else
-                {
-                    NextToken();
-                }
+                NextToken();
             }
 
         }
 
         private void BuildComplexStructureStatement()
         {
-            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
             switch (_lastExtractedLexem.Token)
             {
                 case Token.If:
@@ -611,6 +755,9 @@ namespace ScriptEngine.Compiler
                 case Token.RaiseException:
                     BuildRaiseExceptionStatement();
                     break;
+                case Token.Execute:
+                    BuildExecuteStatement();
+                    break;
                 default:
                     var expected = PopStructureToken();
                     throw CompilerException.TokenExpected(expected);
@@ -619,6 +766,8 @@ namespace ScriptEngine.Compiler
 
         private void BuildIfStatement()
         {
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
+
             var exitIndices = new List<int>();
             NextToken();
             BuildExpression(Token.Then);
@@ -635,6 +784,10 @@ namespace ScriptEngine.Compiler
 
             while (_lastExtractedLexem.Token == Token.ElseIf)
             {
+                if (_lastExtractedLexem.Content.Equals("ElseIf", StringComparison.OrdinalIgnoreCase))
+                {
+                    SystemLogger.Write("WARNING! 'ElseIf' is deprecated! Use 'ElsIf' instead");
+                }
                 _module.Code[jumpFalseIndex] = new Command()
                 {
                     Code = OperationCode.JmpFalse,
@@ -661,7 +814,7 @@ namespace ScriptEngine.Compiler
                     Code = OperationCode.JmpFalse,
                     Argument = _module.Code.Count
                 };
-                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber);
+                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics);
 
                 NextToken();
                 PushStructureToken(Token.EndIf);
@@ -703,6 +856,8 @@ namespace ScriptEngine.Compiler
 
         private void BuildForStatement()
         {
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
+
             NextToken();
             if (_lastExtractedLexem.Token == Token.Each)
             {
@@ -754,7 +909,7 @@ namespace ScriptEngine.Compiler
 
             if (_lastExtractedLexem.Token == Token.EndLoop)
             {
-                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, isExtraCode: true);
+                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics | CodeGenerationFlags.DebugCode);
             }
 
             AddCommand(OperationCode.Jmp, loopBegin);
@@ -819,7 +974,7 @@ namespace ScriptEngine.Compiler
 
             if (_lastExtractedLexem.Token == Token.EndLoop)
             {
-                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, isExtraCode: true);
+                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics | CodeGenerationFlags.DebugCode);
             }
 
             // jmp to start
@@ -837,6 +992,8 @@ namespace ScriptEngine.Compiler
 
         private void BuildWhileStatement()
         {
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
+
             NextToken();
             var conditionIndex = _module.Code.Count;
             var loopRecord = NestedLoopInfo.New();
@@ -854,7 +1011,7 @@ namespace ScriptEngine.Compiler
 
             if (_lastExtractedLexem.Token == Token.EndLoop)
             {
-                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, isExtraCode: true);
+                AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics | CodeGenerationFlags.DebugCode);
             }
 
             AddCommand(OperationCode.Jmp, conditionIndex);
@@ -877,6 +1034,7 @@ namespace ScriptEngine.Compiler
             {
                 throw CompilerException.BreakOutsideOfLoop();
             }
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
 
             var loopInfo = _nestedLoops.Peek();
             if(_isInTryBlock)
@@ -893,6 +1051,8 @@ namespace ScriptEngine.Compiler
                 throw CompilerException.ContinueOutsideOfLoop();
             }
 
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
+
             var loopInfo = _nestedLoops.Peek();
             if(_isInTryBlock)
                 AddCommand(OperationCode.EndTry, 0);
@@ -902,10 +1062,13 @@ namespace ScriptEngine.Compiler
 
         private void BuildReturnStatement()
         {
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
+
             if (_isFunctionProcessed)
             {
                 NextToken();
-                if (_lastExtractedLexem.Token == Token.Semicolon)
+                if (_lastExtractedLexem.Token == Token.Semicolon
+                    || LanguageDef.IsEndOfBlockToken(_lastExtractedLexem.Token))
                 {
                     throw CompilerException.FuncEmptyReturnValue();
                 }
@@ -915,7 +1078,8 @@ namespace ScriptEngine.Compiler
             else if (_inMethodScope)
             {
                 NextToken();
-                if (_lastExtractedLexem.Token != Token.Semicolon)
+                if (_lastExtractedLexem.Token != Token.Semicolon
+                    && !LanguageDef.IsEndOfBlockToken(_lastExtractedLexem.Token))
                 {
                     throw CompilerException.ProcReturnsAValue();
                 }
@@ -930,6 +1094,8 @@ namespace ScriptEngine.Compiler
 
         private void BuildTryExceptStatement()
         {
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine, CodeGenerationFlags.CodeStatistics);
+
             var beginTryIndex = AddCommand(OperationCode.BeginTry, -1);
             bool savedTryFlag = SetTryBlockFlag(true);
             PushStructureToken(Token.Exception);
@@ -943,7 +1109,7 @@ namespace ScriptEngine.Compiler
             if (StringComparer.OrdinalIgnoreCase.Compare(_lastExtractedLexem.Content, "Exception") == 0)
                 SystemLogger.Write("WARNING! BREAKING CHANGE: Keyword 'Exception' is not supported anymore. Consider using 'Except'");
 
-            var beginHandler = AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, isExtraCode: true);
+            var beginHandler = AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics);
 
             CorrectCommandArgument(beginTryIndex, beginHandler);
 
@@ -952,7 +1118,7 @@ namespace ScriptEngine.Compiler
             BuildCodeBatch();
             PopStructureToken();
 
-            var endIndex = AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, isExtraCode: true);
+            var endIndex = AddCommand(OperationCode.LineNum, _lastExtractedLexem.LineNumber, CodeGenerationFlags.CodeStatistics | CodeGenerationFlags.DebugCode);
             AddCommand(OperationCode.EndTry, 0);
             CorrectCommandArgument(jmpIndex, endIndex);
             
@@ -961,6 +1127,8 @@ namespace ScriptEngine.Compiler
 
         private void BuildRaiseExceptionStatement()
         {
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
+
             NextToken();
             if (_lastExtractedLexem.Token == Token.Semicolon)
             {
@@ -978,6 +1146,16 @@ namespace ScriptEngine.Compiler
                 BuildExpression(Token.Semicolon);
                 AddCommand(OperationCode.RaiseException, 0);
             }
+
+        }
+
+        private void BuildExecuteStatement()
+        {
+            AddCommand(OperationCode.LineNum, _parser.CurrentLine);
+            NextToken();
+
+            BuildExpression(Token.Semicolon);
+            AddCommand(OperationCode.Execute, 0);
 
         }
 
@@ -1259,6 +1437,7 @@ namespace ScriptEngine.Compiler
             else if (_lastExtractedLexem.Token == Token.Question)
             {
                 BuildQuestionOperator();
+                BuildContinuationRightHand();
             }
             else
             {
@@ -1392,7 +1571,10 @@ namespace ScriptEngine.Compiler
             return LanguageDef.IsIdentifier(ref lex) 
                 || lex.Type == LexemType.BooleanLiteral
                 || lex.Type == LexemType.NullLiteral
-                || lex.Type == LexemType.UndefinedLiteral;
+                || lex.Type == LexemType.UndefinedLiteral
+                || lex.Token == Token.And
+                || lex.Token == Token.Or
+                || lex.Token == Token.Not;
         }
 
         private void ResolveProperty(string identifier)
@@ -1443,18 +1625,43 @@ namespace ScriptEngine.Compiler
 
             PushStructureToken(Token.ClosePar);
             List<bool> arguments = new List<bool>();
-            
-            NextToken();
-            while (_lastExtractedLexem.Token != Token.ClosePar)
+
+            try
             {
-                if (_lastExtractedLexem.Token == Token.Comma)
+                NextToken(); // съели открывающую скобку
+                while (_lastExtractedLexem.Token != Token.ClosePar)
+                {
+                    PushPassedArgument(arguments);
+                }
+
+                if (_lastExtractedLexem.Token != Token.ClosePar)
+                    throw CompilerException.TokenExpected(")");
+
+                NextToken(); // съели закрывающую скобку
+            }
+            finally
+            {
+                PopStructureToken();
+            }
+            
+            return arguments.ToArray();
+        }
+
+        private void PushPassedArgument(IList<bool> arguments)
+        {
+            if (_lastExtractedLexem.Token == Token.Comma)
+            {
+                AddCommand(OperationCode.PushDefaultArg, 0);
+                arguments.Add(false);
+                NextToken();
+                if (_lastExtractedLexem.Token == Token.ClosePar)
                 {
                     AddCommand(OperationCode.PushDefaultArg, 0);
                     arguments.Add(false);
-                    NextToken();
-                    continue;
                 }
-
+            }
+            else if (_lastExtractedLexem.Token != Token.ClosePar)
+            {
                 BuildExpression(Token.Comma);
                 arguments.Add(true);
                 if (_lastExtractedLexem.Token == Token.Comma)
@@ -1462,20 +1669,11 @@ namespace ScriptEngine.Compiler
                     NextToken();
                     if (_lastExtractedLexem.Token == Token.ClosePar)
                     {
-                        // список аргументов кончился
                         AddCommand(OperationCode.PushDefaultArg, 0);
                         arguments.Add(false);
                     }
                 }
             }
-
-            if (_lastExtractedLexem.Token != Token.ClosePar)
-                throw CompilerException.TokenExpected(")");
-
-            NextToken(); // съели закрывающую скобку
-            PopStructureToken();
-
-            return arguments.ToArray();
         }
 
         private void BuildLoadVariable(string identifier)
@@ -1500,20 +1698,13 @@ namespace ScriptEngine.Compiler
                 AddCommand(OperationCode.LoadLoc, binding.CodeIndex);
             }
         }
-
-        private void BuildIndexedAccess(string identifier)
-        {
-            BuildPushVariable(identifier);
-            NextToken();
-            BuildExpression(Token.CloseBracket);
-            AddCommand(OperationCode.PushIndexed, 0);
-        }
-
+        
         private void BuildFunctionCall(string identifier, int callLineNumber)
         {
             bool[] args = PushMethodArgumentsBeforeCall();
-            AddCommand(OperationCode.LineNum, callLineNumber, isExtraCode: true);
+            AddCommand(OperationCode.LineNum, callLineNumber, CodeGenerationFlags.CodeStatistics);
             BuildMethodCall(identifier, args, true);
+            AddCommand(OperationCode.LineNum, callLineNumber, CodeGenerationFlags.DebugCode);
         }
 
         private bool[] PushMethodArgumentsBeforeCall()
@@ -1574,20 +1765,9 @@ namespace ScriptEngine.Compiler
                 throw CompilerException.TooManyArgumentsPassed();
             }
 
-            for (int i = 0; i < parameters.Length; i++)
+            if (parameters.Skip(argsPassed.Length).Any(param => !param.HasDefaultValue))
             {
-                var paramDef = parameters[i];
-                if (i < argsPassed.Length)
-                {
-                    if (argsPassed[i] == false && !paramDef.HasDefaultValue)
-                    {
-                        throw CompilerException.ArgHasNoDefaultValue(i + 1);
-                    }
-                }
-                else if (!paramDef.HasDefaultValue)
-                {
-                    throw CompilerException.TooLittleArgumentsPassed();
-                }
+                throw CompilerException.TooLittleArgumentsPassed();
             }
         }
 
@@ -1777,6 +1957,7 @@ namespace ScriptEngine.Compiler
         {
             if (_lastExtractedLexem.Token != Token.EndOfText)
             {
+                _previousExtractedLexem = _lastExtractedLexem;
                 _lastExtractedLexem = _parser.NextLexem();
             }
             else
@@ -1796,14 +1977,20 @@ namespace ScriptEngine.Compiler
             return tok;
         }
 
-        private int AddCommand(OperationCode code, int arg, bool isExtraCode = false)
+        private int AddCommand(OperationCode code, int arg, CodeGenerationFlags emitConditions = CodeGenerationFlags.Always)
         {
             var addr = _module.Code.Count;
-            if (!isExtraCode || ProduceExtraCode)
+            bool emit = emitConditions == CodeGenerationFlags.Always || ExtraCodeConditionsMet(emitConditions);
+            if (emit)
             {
                 _module.Code.Add(new Command() { Code = code, Argument = arg });
             }
             return addr;
+        }
+
+        private bool ExtraCodeConditionsMet(CodeGenerationFlags emitConditions)
+        {
+            return (((int)ProduceExtraCode) & (int)emitConditions) != 0;
         }
 
         private int PushSimpleVariable(SymbolBinding binding)

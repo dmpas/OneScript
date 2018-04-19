@@ -168,9 +168,15 @@ namespace ScriptEngine.Machine.Contexts
     {
         private List<PropertyTarget<TInstance>> _properties;
 
-        public ContextPropertyMapper()
+        public void Init()
         {
-            FindProperties();
+            if (_properties != null) return;
+
+            lock (this)
+            {
+                if(_properties == null)
+                    FindProperties();
+            }
         }
 
         private void FindProperties()
@@ -182,7 +188,9 @@ namespace ScriptEngine.Machine.Contexts
 
         public int FindProperty(string name)
         {
-            var idx = _properties.FindIndex(x => x.Name.ToLower() == name.ToLower() || x.Alias.ToLower() == name.ToLower());
+            Init();
+            var idx = _properties.FindIndex(x => String.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase) 
+                || String.Equals(x.Alias, name, StringComparison.OrdinalIgnoreCase));
             if (idx < 0)
                 throw RuntimeException.PropNotFoundException(name);
 
@@ -191,6 +199,7 @@ namespace ScriptEngine.Machine.Contexts
 
         public PropertyTarget<TInstance> GetProperty(int index)
         {
+            Init();
             return _properties[index];
         }
 
@@ -198,14 +207,30 @@ namespace ScriptEngine.Machine.Contexts
         {
             get
             {
+                Init();
                 return _properties.Count;
             }
         }
 
-        public string[] GetProperties()
+        public VariableInfo GetPropertyInfo(int propNum)
         {
-            return _properties.Select(x => x.Name).ToArray();
+            var prop = _properties[propNum];
+            return new VariableInfo()
+            {
+                Identifier = prop.Name,
+                Alias = prop.Alias,
+                Type = SymbolType.ContextProperty,
+                Index = propNum
+            };
         }
-
+        
+        public IEnumerable<VariableInfo> GetProperties()
+        {
+            Init();
+            for (int i = 0; i < Count; i++)
+            {
+                yield return GetPropertyInfo(i);
+            }
+        }
     }
 }

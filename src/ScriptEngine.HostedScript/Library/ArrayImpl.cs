@@ -36,12 +36,18 @@ namespace ScriptEngine.HostedScript.Library
 
         public override IValue GetIndexedValue(IValue index)
         {
-            return Get((int)index.AsNumber());
+            if(index.DataType == DataType.Number)
+                return Get((int)index.AsNumber());
+
+            return base.GetIndexedValue(index);
         }
 
         public override void SetIndexedValue(IValue index, IValue val)
         {
-            _values[(int)index.AsNumber()] = val;
+            if (index.DataType == DataType.Number)
+                _values[(int)index.AsNumber()] = val;
+            else
+                base.SetIndexedValue(index, val);
         }
 
         public override bool IsPropReadable(int propNum)
@@ -178,7 +184,7 @@ namespace ScriptEngine.HostedScript.Library
         /// </summary>
         /// <param name="dimensions">Числовые размерности массива. Например, "Массив(2,3)", создает двумерный массив 2х3.</param>
         /// <returns></returns>
-        [ScriptConstructor(Name="С заданным количеством измерений")]
+        [ScriptConstructor(Name = "По количеству элементов")]
         public static IRuntimeContextInstance Constructor(IValue[] dimensions)
         {
             ArrayImpl cloneable = null;

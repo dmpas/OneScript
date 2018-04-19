@@ -14,11 +14,14 @@ namespace ScriptEngine.Machine
     public interface IVariable : IValue
     {
         IValue Value { get; set; }
+        string Name { get; }
     }
 
     public class Variable : IVariable
     {
-        IValue _val;
+        private IValue _val;
+        
+        public string Name { get; private set; }
 
         private Variable()
         {
@@ -27,27 +30,37 @@ namespace ScriptEngine.Machine
 
         #region Factory
 
-        public static IVariable Create(IValue val)
+        public static IVariable Create(IValue val, string symbol)
         {
             return new Variable()
             {
-                _val = val
+                _val = val,
+                Name = symbol
             };
         }
 
-        public static IVariable CreateReference(IVariable variable)
+        public static IVariable Create(IValue val, VariableInfo metadata)
         {
-            return VariableReference.CreateSimpleReference(variable);
+            return new Variable()
+            {
+                _val = val,
+                Name = metadata.Identifier
+            };
         }
 
-        public static IVariable CreateContextPropertyReference(IRuntimeContextInstance context, int propertyNumber)
+        public static IVariable CreateReference(IVariable variable, string refName)
         {
-            return VariableReference.CreateContextPropertyReference(context, propertyNumber);
+            return new VariableReference(variable, refName);
         }
 
-        public static IVariable CreateIndexedPropertyReference(IRuntimeContextInstance context, IValue index)
+        public static IVariable CreateContextPropertyReference(IRuntimeContextInstance context, int propertyNumber, string refName)
         {
-            return VariableReference.CreateIndexedPropertyReference(context, index);
+            return new VariableReference(context, propertyNumber, refName);
+        }
+
+        public static IVariable CreateIndexedPropertyReference(IRuntimeContextInstance context, IValue index, string refName)
+        {
+            return new VariableReference(context, index, refName);
         }
 
         #endregion
@@ -140,9 +153,29 @@ namespace ScriptEngine.Machine
             private int _contextPropertyNumber;
             private IValue _index;
 
-            private VariableReference()
-            {
+            public string Name { get; private set; }
 
+            public VariableReference(IVariable var, string name)
+            {
+                _refType = ReferenceType.Simple;
+                _referencedValue = var;
+                Name = name;
+            }
+
+            public VariableReference(IRuntimeContextInstance context, int propertyNumber, string name)
+            {
+                _refType = ReferenceType.ContextProperty;
+                _context = context;
+                _contextPropertyNumber = propertyNumber;
+                Name = name;
+            }
+
+            public VariableReference(IRuntimeContextInstance context, IValue index, string name)
+            {
+                _refType = ReferenceType.IndexedProperty;
+                _context = context;
+                _index = index;
+                Name = name;
             }
 
             private enum ReferenceType
@@ -257,33 +290,7 @@ namespace ScriptEngine.Machine
             }
 
             #endregion
-
-            public static IVariable CreateSimpleReference(IVariable var)
-            {
-                var newVar = new VariableReference();
-                newVar._refType = ReferenceType.Simple;
-                newVar._referencedValue = var;
-                return newVar;
-            }
-
-            public static IVariable CreateContextPropertyReference(IRuntimeContextInstance context, int propertyNumber)
-            {
-                var newVar = new VariableReference();
-                newVar._refType = ReferenceType.ContextProperty;
-                newVar._context = context;
-                newVar._contextPropertyNumber = propertyNumber;
-                return newVar;
-            }
-
-            public static IVariable CreateIndexedPropertyReference(IRuntimeContextInstance context, IValue index)
-            {
-                var newVar = new VariableReference();
-                newVar._refType = ReferenceType.IndexedProperty;
-                newVar._context = context;
-                newVar._index = index;
-                return newVar;
-            }
-
+            
         }
 
         #endregion

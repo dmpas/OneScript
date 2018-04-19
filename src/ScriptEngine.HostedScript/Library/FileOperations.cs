@@ -189,7 +189,7 @@ namespace ScriptEngine.HostedScript.Library
         /// <param name="path">Каталог из которого удаляются файлы, или сам файл.</param>
         /// <param name="mask">Маска файлов. Необязательный параметр. Если указан, то первый параметр трактуется, как каталог.</param>
         [ContextMethod("УдалитьФайлы", "DeleteFiles")]
-        public void DeleteFiles(string path, string mask = "")
+        public void DeleteFiles(string path, string mask = null)
         {
             if (mask == null)
             {
@@ -267,7 +267,7 @@ namespace ScriptEngine.HostedScript.Library
         }
 
         /// <summary>
-        /// Получить текущий каталог
+        /// Установить каталог текущим
         /// </summary>
         /// <param name="path">Имя нового текущего каталога</param>
         [ContextMethod("УстановитьТекущийКаталог", "SetCurrentDirectory")]

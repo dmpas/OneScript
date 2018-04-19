@@ -7,8 +7,6 @@ at http://mozilla.org/MPL/2.0/.
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using ScriptEngine.Machine.Contexts;
 
 namespace ScriptEngine.Machine.Contexts
 {
@@ -17,14 +15,23 @@ namespace ScriptEngine.Machine.Contexts
         readonly LoadedModule _module;
         Dictionary<string, int> _ownPropertyIndexes;
         List<IValue> _ownProperties;
+
+        private Func<string> _asStringOverride;
         
+        public IValue[] ConstructorParams { get; private set; }
         
-        internal UserScriptContextInstance(LoadedModule module) : base(module)
+        static UserScriptContextInstance()
         {
-            _module = module;
+            TypeManager.RegisterType("Сценарий", typeof(UserScriptContextInstance));
         }
 
-        internal UserScriptContextInstance(LoadedModule module, string asObjectOfType, IValue[] args = null)
+        public UserScriptContextInstance(LoadedModule module) : base(module)
+        {
+            _module = module;
+            ConstructorParams = new IValue[0];
+        }
+
+        public UserScriptContextInstance(LoadedModule module, string asObjectOfType, IValue[] args = null)
             : base(module, true)
         {
             DefineType(TypeManager.GetTypeByName(asObjectOfType));
@@ -38,7 +45,89 @@ namespace ScriptEngine.Machine.Contexts
 
         }
 
-        public void AddProperty(string name, IValue value)
+        protected override void OnInstanceCreation()
+        {
+            ActivateAsStringOverride();
+
+            base.OnInstanceCreation();
+            var methId = GetScriptMethod("ПриСозданииОбъекта", "OnObjectCreate");
+            int constructorParamsCount = ConstructorParams.Count();
+
+            if (methId > -1)
+            {
+                bool hasParamsError = false;
+                var procInfo = GetMethodInfo(methId);
+
+                int procParamsCount = procInfo.Params.Count();
+
+                if (procParamsCount < constructorParamsCount)
+                {
+                    hasParamsError = true;
+                }
+
+                int reqParams = 0;
+                foreach (var itm in procInfo.Params)
+                {
+                    if (!itm.HasDefaultValue) reqParams++;
+                }
+                if (reqParams > constructorParamsCount)
+                {
+                    hasParamsError = true;
+                }
+                if (hasParamsError)
+                {
+                    throw new RuntimeException("Параметры конструктора: "
+                        + "необходимых параметров: " + Math.Min(procParamsCount, reqParams).ToString()
+                        + ", передано параметров " + constructorParamsCount.ToString()
+                        );
+                }
+
+                CallAsProcedure(methId, ConstructorParams);
+            }
+            else
+            {
+                if (constructorParamsCount > 0)
+                {
+                    throw new RuntimeException("Конструктор не определен, но переданы параметры конструктора.");
+                }
+            }
+        }
+
+        private void ActivateAsStringOverride()
+        {
+            var methId = GetScriptMethod("ОбработкаПолученияПредставления", "PresentationGetProcessing");
+            if (methId == -1)
+                _asStringOverride = base.AsString;
+            else
+            {
+                var signature = GetMethodInfo(methId);
+                if (signature.ArgCount != 2)
+                    throw new RuntimeException("Обработчик получения представления должен иметь 2 параметра");
+
+                _asStringOverride = () => GetOverridenPresentation(methId);
+            }
+        }
+
+        private string GetOverridenPresentation(int methId)
+        {
+            var standard = ValueFactory.Create(true);
+            var strValue = ValueFactory.Create();
+
+            var arguments = new IValue[2]
+            {
+                Variable.Create(strValue, "string"),
+                Variable.Create(standard, "standardProcessing")
+            };
+
+            CallScriptMethod(methId, arguments);
+
+            if (arguments[1].AsBoolean() == true)
+                return base.AsString();
+
+            return arguments[0].AsString();
+        }
+
+        public void AddProperty(string name, string alias, IValue value)
         {
             if(_ownProperties == null)
             {
@@ -48,8 +137,17 @@ namespace ScriptEngine.Machine.Contexts
 
             var newIndex = _ownProperties.Count;
             _ownPropertyIndexes.Add(name, newIndex);
+            if (!string.IsNullOrEmpty(alias))
+            {
+                _ownPropertyIndexes.Add(alias, newIndex);
+            }
             _ownProperties.Add(value);
 
+        }
+
+        public void AddProperty(string name, IValue value)
+        {
+            AddProperty(name, null, value);
         }
 
         protected override int GetOwnMethodCount()
@@ -84,30 +182,23 @@ namespace ScriptEngine.Machine.Contexts
         {
             return _ownProperties[index];
         }
-
-        #region IReflectableContext Members
-
-        public override IEnumerable<VariableInfo> GetProperties()
+        
+        protected override string GetOwnPropName(int index)
         {
-            foreach (var item in _module.ExportedProperies)
-            {
-                var vi = new VariableInfo();
-                vi.Identifier = item.SymbolicName;
-                vi.Index = item.Index;
-                vi.Type = SymbolType.ContextProperty;
-                
-                yield return vi;
-            }
+            if (_ownProperties == null)
+                throw new ArgumentException("Unknown property index");
+
+            return _ownPropertyIndexes.Where(x => x.Value == index).First().Key;
+        }
+        
+        public override int GetMethodsCount()
+        {
+            return _module.Methods.Length;
         }
 
-        public override IEnumerable<MethodInfo> GetMethods()
+        public override string AsString()
         {
-            foreach (var item in _module.ExportedMethods)
-            {
-                yield return GetMethodInfo(item.Index);
-            }
+            return _asStringOverride();
         }
-
-        #endregion
     }
 }

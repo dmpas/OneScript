@@ -21,6 +21,7 @@ namespace ScriptEngine.Compiler
         private readonly ParserState _operatorState = new OperatorParserState();
         private readonly ParserState _dateState = new DateParserState();
         private readonly ParserState _directiveState = new DirectiveParserState();
+        private readonly ParserState _annotationState = new AnnotationParserState();
 
         public string Code { get; set; }
 
@@ -84,6 +85,12 @@ namespace ScriptEngine.Compiler
                     else if(cs == SpecialChars.Directive)
                     {
                         state = _directiveState;
+                    }
+                    else if (cs == '&')
+                    {
+                        _iterator.GetContents();
+                        _iterator.MoveNext();
+                        state = _annotationState;
                     }
                     else
                     {
@@ -166,7 +173,8 @@ namespace ScriptEngine.Compiler
         NullLiteral,
         EndOperator,
         EndOfText,
-        Directive
+        Directive,
+        Annotation
     }
 
     abstract class ParserState
@@ -293,18 +301,9 @@ namespace ScriptEngine.Compiler
 
                 if (!iterator.MoveNext())
                 {
-                    if (isEndOfText)
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        isEndOfText = true;
-                    }
+                    isEndOfText = true;
                 }
             }
-
-            return Lexem.Empty();
         }
     }
 
@@ -347,20 +346,24 @@ namespace ScriptEngine.Compiler
 
                 if (cs == SpecialChars.StringQuote)
                 {
-                    iterator.MoveNext();
-                    if (iterator.CurrentSymbol == SpecialChars.StringQuote)
-                    { /* Двойная кавычка */
-                        ContentBuilder.Append("\"");
-                        continue;
-                    }
+                    if (iterator.MoveNext())
+                    {
+                        if (iterator.CurrentSymbol == SpecialChars.StringQuote)
+                        {
+                            /* Двойная кавычка */
+                            ContentBuilder.Append("\"");
+                            continue;
+                        }
 
-                    /* Завершение строки */
-                    SkipSpacesAndComments(iterator);
+                        /* Завершение строки */
+                        SkipSpacesAndComments(iterator);
 
-                    if (iterator.CurrentSymbol == SpecialChars.StringQuote)
-                    {   /* Сразу же началась новая строка */
-                        ContentBuilder.Append('\n');
-                        continue;
+                        if (iterator.CurrentSymbol == SpecialChars.StringQuote)
+                        {
+                            /* Сразу же началась новая строка */
+                            ContentBuilder.Append('\n');
+                            continue;
+                        }
                     }
 
                     var lex = new Lexem
@@ -589,6 +592,17 @@ namespace ScriptEngine.Compiler
             return lex;
         }
 
+    }
+
+    class AnnotationParserState : ParserState
+    {
+        public override Lexem ReadNextLexem(ParseIterator iterator)
+        {
+            var word = new WordParserState();
+            var lexem = word.ReadNextLexem(iterator);
+            lexem.Type = LexemType.Annotation;
+            return lexem;
+        }
     }
 
 }

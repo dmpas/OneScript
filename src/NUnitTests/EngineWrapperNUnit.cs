@@ -4,95 +4,87 @@ Mozilla Public License, v.2.0. If a copy of the MPL
 was not distributed with this file, You can obtain one 
 at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
-using ScriptEngine.Machine.Contexts;
-using ScriptEngine.HostedScript.Library;
-using ScriptEngine.Machine;
+using ScriptEngine;
 using ScriptEngine.Environment;
 using ScriptEngine.HostedScript;
-using System.IO;
+using ScriptEngine.HostedScript.Library;
 
 namespace NUnitTests
 {
-    class EngineWrapperNUnit : IHostApplication
-    {
+	internal class EngineWrapperNUnit : IHostApplication
+	{
+		private string[] commandLineArgs;
 
-        private HostedScriptEngine engine;
-        private string[] commandLineArgs;
+		public HostedScriptEngine Engine { get; private set; }
 
-        public HostedScriptEngine StartEngine()
-        {
-            engine = new HostedScriptEngine();
-            engine.Initialize();
+		public HostedScriptEngine StartEngine()
+		{
+			Engine = new HostedScriptEngine();
+			Engine.Initialize();
 
-            commandLineArgs = new string[] { };
+			commandLineArgs = new string[]
+			{
+			};
 
-            return engine;
-        }
+			return Engine;
+		}
+		
+		public int RunTestString(string source)
+		{
+			var process = Engine.CreateProcess(this, Engine.Loader.FromString(source));
+			return process.Start();
+		}
+		
+		private int RunTestScript(ICodeSource source, string resourceName)
+		{
+			var module = Engine.GetCompilerService().Compile(source);
 
-        private int RunTestScript(ICodeSource source, string resourceName)
-        {
-            var module = engine.GetCompilerService().CreateModule(source);
+			Engine.LoadUserScript(new UserAddedScript
+			{
+				Type = UserAddedScriptType.Class,
+				Image = module,
+				Symbol = resourceName
+			});
 
-            engine.LoadUserScript(new ScriptEngine.UserAddedScript()
-            {
-                Type = ScriptEngine.UserAddedScriptType.Class,
-                Module = module,
-                Symbol = resourceName
-            });
+			var process = Engine.CreateProcess(this, source);
+			return process.Start();
+		}
 
-            var process = engine.CreateProcess(this, source);
-            return process.Start();
-        }
+		internal int RunTestScriptFromPath(string scriptFilePath, string argsScript = "")
+		{
+			if (argsScript != "")
+				commandLineArgs = argsScript.Split(' ');
 
-        internal int RunTestScriptFromPath(string scriptFilePath, String argsScript = "")
-        {
-            if (argsScript != "")
-            {
-                commandLineArgs = argsScript.Split(' ');
-            }
+			var sourceToCompile = Engine.Loader.FromFile(scriptFilePath);
 
-            ICodeSource sourceToCompile = engine.Loader.FromFile(scriptFilePath);
+			return RunTestScript(sourceToCompile, scriptFilePath);
+		}
 
-            return RunTestScript(sourceToCompile, scriptFilePath);
-        }
+		public string[] GetCommandLineArguments()
+		{
+			return commandLineArgs;
+		}
 
-        public EngineWrapperNUnit()
-        {
-        }
-        public string[] GetCommandLineArguments()
-        {
-            return this.commandLineArgs;
-        }
+		public bool InputString(out string result, int maxLen)
+		{
+			result = "";
+			return false;
+		}
 
-        public bool InputString(out string result, int maxLen)
-        {
-            result = "";
-            return false;
-        }
+		public void ShowExceptionInfo(Exception exc)
+		{
+			throw exc;
+		}
 
-        public void ShowExceptionInfo(Exception exc)
-        {
-            throw exc;
-        }
-
-        public void Echo(string str, MessageStatusEnum status = MessageStatusEnum.Ordinary)
-        {
-            Console.WriteLine(str);
-        }
-
-        public HostedScriptEngine Engine
-        {
-            get
-            {
-                return engine;
-            }
-        }
- 
-    }
+		public void Echo(string str, MessageStatusEnum status = MessageStatusEnum.Ordinary)
+		{
+			Console.WriteLine(str);
+		}
+	}
 }

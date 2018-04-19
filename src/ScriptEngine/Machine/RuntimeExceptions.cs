@@ -26,6 +26,11 @@ namespace ScriptEngine.Machine
         {
         }
 
+        public static RuntimeException DeprecatedMethodCall(string name)
+        {
+            return new RuntimeException($"Вызов безнадёжно устаревшего метода {name}");
+        }
+
         public static RuntimeException ConvertToNumberException()
         {
             return new RuntimeException("Преобразование к типу 'Число' не поддерживается");
@@ -61,6 +66,11 @@ namespace ScriptEngine.Machine
             return new RuntimeException(string.Format("Метод объекта не обнаружен ({0})", methodName));
         }
 
+        public static RuntimeException MethodNotFoundException(string methodName, string objectName)
+        {
+            return new RuntimeException(string.Format("Метод объекта не обнаружен ({{{1}}}::{0})", methodName, objectName));
+        }
+
         public static RuntimeException ValueIsNotObjectException()
         {
             return new RuntimeException("Значение не является значением объектного типа");
@@ -74,11 +84,6 @@ namespace ScriptEngine.Machine
         public static RuntimeException TooLittleArgumentsPassed()
         {
             return new RuntimeException("Недостаточно фактических параметров");
-        }
-
-        public static RuntimeException ArgHasNoDefaultValue(int argNum)
-        {
-            return new RuntimeException(string.Format("Аргумент {0} не имеет значения по умолчанию", argNum));
         }
 
         public static RuntimeException InvalidArgumentType()

@@ -6,8 +6,6 @@ at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using ScriptEngine.Compiler;
 using ScriptEngine.Environment;
 using ScriptEngine.Machine;
@@ -27,9 +25,9 @@ namespace ScriptEngine
             _currentContext = new ModuleCompilerContext(outerContext);
         }
 
-        public bool ProduceExtraCode { get; set; }
+        public CodeGenerationFlags ProduceExtraCode { get; set; }
 
-        public int DefineVariable(string name, SymbolType type)
+        public int DefineVariable(string name, string alias, SymbolType type)
         {
             RegisterScopeIfNeeded();
 
@@ -37,9 +35,9 @@ namespace ScriptEngine
             {
                 int varIdx;
                 if (type == SymbolType.Variable)
-                    varIdx = _currentContext.DefineVariable(name).CodeIndex;
+                    varIdx = _currentContext.DefineVariable(name, alias).CodeIndex;
                 else
-                    varIdx = _currentContext.DefineProperty(name).CodeIndex;
+                    varIdx = _currentContext.DefineProperty(name, alias).CodeIndex;
 
                 _predefinedVariables.Add(varIdx);
                 return varIdx;
@@ -68,11 +66,20 @@ namespace ScriptEngine
             }
         }
 
+        [Obsolete]
         public ScriptModuleHandle CreateModule(ICodeSource source)
+        {
+            return new ScriptModuleHandle()
+                {
+                    Module = Compile(source)
+                };
+        }
+
+        public ModuleImage Compile(ICodeSource source)
         {
             try
             {
-                return Compile(source);
+                return CompileInternal(source);
             }
             finally
             {
@@ -81,7 +88,7 @@ namespace ScriptEngine
             }
         }
 
-        private ScriptModuleHandle Compile(ICodeSource source)
+        private ModuleImage CompileInternal(ICodeSource source)
         {
             RegisterScopeIfNeeded();
 
@@ -117,19 +124,6 @@ namespace ScriptEngine
                 }
             }
 
-            foreach (var item in _predefinedVariables)
-            {
-                var varDef = _scope.GetVariable(item);
-                if (varDef.Type == SymbolType.ContextProperty)
-                {
-                    compiledImage.ExportedProperties.Add(new ExportedSymbol()
-                    {
-                        SymbolicName = varDef.Identifier,
-                        Index = varDef.Index
-                    });
-                }
-            }
-
             var mi = new ModuleInformation();
             mi.CodeIndexer = parser.GetCodeIndexer();
             // пока у модулей нет собственных имен, будет совпадать с источником модуля
@@ -137,10 +131,7 @@ namespace ScriptEngine
             mi.Origin = source.SourceDescription;
             compiledImage.ModuleInfo = mi;
 
-            return new ScriptModuleHandle()
-            {
-                Module = compiledImage
-            };
+            return compiledImage;
         }
 
         private bool ResolveDirective(string directive, string value, bool codeEntered)

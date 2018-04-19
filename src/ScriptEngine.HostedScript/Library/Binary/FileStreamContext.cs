@@ -19,7 +19,7 @@ namespace ScriptEngine.HostedScript.Library.Binary
     /// Следует учитывать, что помимо буферизации существует кэширование чтения и записи файлов в операционной системе, на которое невозможно повлиять программно.
     /// </summary>
     [ContextClass("ФайловыйПоток", "FileStream")]
-    public class FileStreamContext : AutoContext<FileStreamContext>
+    public class FileStreamContext : AutoContext<FileStreamContext>, IStreamWrapper, IDisposable
     {
 
         private readonly FileStream _underlyingStream;
@@ -32,7 +32,8 @@ namespace ScriptEngine.HostedScript.Library.Binary
             if(bufferSize == 0)
                 _underlyingStream = new FileStream(filename, 
                     FileStreamsManager.ConvertFileOpenModeToCLR(openMode),
-                    FileStreamsManager.ConvertFileAccessToCLR(access));
+                    FileStreamsManager.ConvertFileAccessToCLR(access),
+                    FileShare.Read);
             else
                 _underlyingStream = new FileStream(filename, 
                     FileStreamsManager.ConvertFileOpenModeToCLR(openMode), 

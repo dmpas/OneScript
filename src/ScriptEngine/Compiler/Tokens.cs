@@ -14,9 +14,11 @@ namespace ScriptEngine.Compiler
     static class LanguageDef
     {
         static readonly Dictionary<Token, int> _priority = new Dictionary<Token, int>();
-        static readonly Dictionary<string, Token> _stringToToken = new Dictionary<string, Token>(StringComparer.InvariantCultureIgnoreCase);
 
-        const int BUILTINS_INDEX = (int)Token.ByValParam;
+        static readonly Dictionary<string, Token> _stringToToken =
+            new Dictionary<string, Token>(StringComparer.InvariantCultureIgnoreCase);
+
+        const int BUILTINS_INDEX = (int) Token.ByValParam;
 
         // structure
         static LanguageDef()
@@ -27,7 +29,7 @@ namespace ScriptEngine.Compiler
             _priority.Add(Token.Multiply, 6);
             _priority.Add(Token.Division, 6);
             _priority.Add(Token.Modulo, 6);
-            
+
             _priority.Add(Token.Or, 1);
             _priority.Add(Token.And, 2);
             _priority.Add(Token.Not, 3);
@@ -38,7 +40,7 @@ namespace ScriptEngine.Compiler
             _priority.Add(Token.MoreOrEqual, 4);
             _priority.Add(Token.LessOrEqual, 4);
             _priority.Add(Token.NotEqual, 4);
-            
+
             // tokens
 
             #region Ключевые слова
@@ -46,7 +48,8 @@ namespace ScriptEngine.Compiler
             AddToken(Token.If, "если", "if");
             AddToken(Token.Then, "тогда", "then");
             AddToken(Token.Else, "иначе", "else");
-            AddToken(Token.ElseIf, "иначеесли", "elseif");
+            AddToken(Token.ElseIf, "иначеесли", "elsif");
+            AddToken(Token.ElseIf, "elseif"); // TODO: Deprecated 'ElseIf'
             AddToken(Token.EndIf, "конецесли", "endif");
             AddToken(Token.VarDef, "перем", "var");
             AddToken(Token.ByValParam, "знач", "val");
@@ -62,10 +65,11 @@ namespace ScriptEngine.Compiler
             AddToken(Token.Loop, "цикл", "do");
             AddToken(Token.EndLoop, "конеццикла", "enddo");
             AddToken(Token.Return, "возврат", "return");
-            AddToken(Token.Continue, "продолжить", "contınue");
+            AddToken(Token.Continue, "продолжить", "continue");
             AddToken(Token.Break, "прервать", "break");
             AddToken(Token.Try, "попытка", "try");
             AddToken(Token.Exception, "исключение", "except");
+            AddToken(Token.Execute, "выполнить", "execute");
             // обратная совместимость с beta 1.0
             AddToken(Token.Exception, "exception");
             AddToken(Token.RaiseException, "вызватьисключение", "raise");
@@ -110,11 +114,12 @@ namespace ScriptEngine.Compiler
             AddToken(Token.Date, "дата", "date");
             AddToken(Token.Type, "тип", "type");
             AddToken(Token.ValType, "типзнч", "typeof");
- 
+
             #endregion
 
             #region Встроенные функции
 
+            AddToken(Token.Eval, "вычислить", "eval");
             AddToken(Token.StrLen, "стрдлина", "strlen");
             AddToken(Token.TrimL, "сокрл", "triml");
             AddToken(Token.TrimR, "сокрп", "trimr");
@@ -177,7 +182,7 @@ namespace ScriptEngine.Compiler
             AddToken(Token.ModuleInfo, "текущийсценарий", "currentscript");
 
             #endregion
-            
+
         }
 
         private static void AddToken(Token token, string name)
@@ -194,7 +199,7 @@ namespace ScriptEngine.Compiler
         public static Token GetToken(string tokText)
         {
             Token result;
-            if(_stringToToken.TryGetValue(tokText, out result))
+            if (_stringToToken.TryGetValue(tokText, out result))
             {
                 return result;
             }
@@ -211,25 +216,25 @@ namespace ScriptEngine.Compiler
 
         public static bool IsBuiltInFunction(Token token)
         {
-            return (int)token > BUILTINS_INDEX;
+            return (int) token > BUILTINS_INDEX;
         }
 
         public static bool IsBinaryOperator(Token token)
         {
             return token == Token.Plus
-                || token == Token.Minus
-                || token == Token.Multiply
-                || token == Token.Division
-                || token == Token.Modulo
-                || token == Token.And
-                || token == Token.Or
-                || token == Token.Not
-                || token == Token.LessThan
-                || token == Token.LessOrEqual
-                || token == Token.MoreThan
-                || token == Token.MoreOrEqual
-                || token == Token.Equal
-                || token == Token.NotEqual;
+                   || token == Token.Minus
+                   || token == Token.Multiply
+                   || token == Token.Division
+                   || token == Token.Modulo
+                   || token == Token.And
+                   || token == Token.Or
+                   || token == Token.Not
+                   || token == Token.LessThan
+                   || token == Token.LessOrEqual
+                   || token == Token.MoreThan
+                   || token == Token.MoreOrEqual
+                   || token == Token.Equal
+                   || token == Token.NotEqual;
         }
 
         public static bool IsLogicalOperator(Token token)
@@ -240,11 +245,11 @@ namespace ScriptEngine.Compiler
         public static bool IsLiteral(ref Lexem lex)
         {
             return lex.Type == LexemType.StringLiteral
-                || lex.Type == LexemType.NumberLiteral
-                || lex.Type == LexemType.BooleanLiteral
-                || lex.Type == LexemType.DateLiteral
-                || lex.Type == LexemType.UndefinedLiteral
-                || lex.Type == LexemType.NullLiteral;
+                   || lex.Type == LexemType.NumberLiteral
+                   || lex.Type == LexemType.BooleanLiteral
+                   || lex.Type == LexemType.DateLiteral
+                   || lex.Type == LexemType.UndefinedLiteral
+                   || lex.Type == LexemType.NullLiteral;
         }
 
         public static bool IsUserSymbol(ref Lexem lex)
@@ -260,15 +265,26 @@ namespace ScriptEngine.Compiler
         public static Token[] BuiltInFunctions()
         {
             var values = Enum.GetValues(typeof(Token));
-            var result = new Token[values.Length-BUILTINS_INDEX-1];
+            var result = new Token[values.Length - BUILTINS_INDEX - 1];
             for (int i = BUILTINS_INDEX + 1, j = 0; i < values.Length; i++, j++)
             {
-                result[j] = (Token)values.GetValue(i);
+                result[j] = (Token) values.GetValue(i);
             }
 
             return result;
         }
 
+        public static bool IsEndOfBlockToken(Token token)
+        {
+            return token == Token.EndIf
+                   || token == Token.EndProcedure
+                   || token == Token.EndFunction
+                   || token == Token.Else
+                   || token == Token.EndLoop
+                   || token == Token.EndTry
+                   || token == Token.EndOfText
+                   || token == Token.ElseIf;
+        }
     }
 
     static class SpecialChars
@@ -341,6 +357,7 @@ namespace ScriptEngine.Compiler
         EndTry,
         EndOfText,
         Export,
+        Execute,
 
         // operators
         Plus,
@@ -377,6 +394,7 @@ namespace ScriptEngine.Compiler
 
         // built-in functions
         // must be declared last
+        Eval,
         Bool,
         Number,
         Str,

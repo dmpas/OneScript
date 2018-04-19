@@ -6,7 +6,6 @@ at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using ScriptEngine.Environment;
 using System.Security.Cryptography;
@@ -80,10 +79,10 @@ namespace ScriptEngine.Machine.Contexts
             return LoadAndCreate(compiler, code, externalContext);
         }
 
-        public IRuntimeContextInstance LoadFromString(CompilerService compiler, string text)
+        public IRuntimeContextInstance LoadFromString(CompilerService compiler, string text, ExternalContextData externalContext = null)
         {
             var code = _engine.Loader.FromString(text);
-            return LoadAndCreate(compiler, code, null);
+            return LoadAndCreate(compiler, code, externalContext);
         }
 
 
@@ -113,10 +112,10 @@ namespace ScriptEngine.Machine.Contexts
                 return;
             }
 
-            var moduleHandle = CreateModuleFromSource(compiler, code, null);
-            var loadedHandle = _engine.LoadModuleImage(moduleHandle);
+            var module = CompileModuleFromSource(compiler, code, null);
+            var loaded = new LoadedModule(module);
 
-            _loadedModules.Add(typeName, loadedHandle.Module);
+            _loadedModules.Add(typeName, loaded);
             using(var md5Hash = MD5.Create())
             {
                 var hash = GetMd5Hash(md5Hash, code.Code);
@@ -127,15 +126,27 @@ namespace ScriptEngine.Machine.Contexts
 
         }
 
+        [Obsolete]
         public void LoadAndRegister(string typeName, ScriptModuleHandle moduleHandle)
+        {
+            LoadAndRegister(typeName, moduleHandle.Module);
+        }
+
+        public void LoadAndRegister(string typeName, ModuleImage moduleImage)
         {
             if (_loadedModules.ContainsKey(typeName))
             {
+                var alreadyLoadedSrc = _loadedModules[typeName].ModuleInfo.Origin;
+                var currentSrc = moduleImage.ModuleInfo.Origin;
+
+                if(alreadyLoadedSrc != currentSrc)
+                    throw new RuntimeException("Type «" + typeName + "» already registered");
+
                 return;
             }
 
-            var loadedHandle = _engine.LoadModuleImage(moduleHandle);
-            _loadedModules.Add(typeName, loadedHandle.Module);
+            var loadedModule = new LoadedModule(moduleImage);
+            _loadedModules.Add(typeName, loadedModule);
             
             TypeManager.RegisterType(typeName, typeof(AttachedScriptsFactory));
 
@@ -143,23 +154,32 @@ namespace ScriptEngine.Machine.Contexts
 
         private IRuntimeContextInstance LoadAndCreate(CompilerService compiler, Environment.ICodeSource code, ExternalContextData externalContext)
         {
-            var moduleHandle = CreateModuleFromSource(compiler, code, externalContext);
-            var loadedHandle = _engine.LoadModuleImage(moduleHandle);
-            return _engine.NewObject(loadedHandle.Module, externalContext);
+            var module = CompileModuleFromSource(compiler, code, externalContext);
+            var loadedHandle = new LoadedModule(module);
+            return _engine.NewObject(loadedHandle, externalContext);
         }
 
+        [Obsolete]
         public ScriptModuleHandle CreateModuleFromSource(CompilerService compiler, Environment.ICodeSource code, ExternalContextData externalContext)
         {
-            compiler.DefineVariable("ЭтотОбъект", SymbolType.ContextProperty);
+            return new ScriptModuleHandle()
+            {
+                Module = CompileModuleFromSource(compiler, code, externalContext)
+            };
+        }
+
+        public ModuleImage CompileModuleFromSource(CompilerService compiler, Environment.ICodeSource code, ExternalContextData externalContext)
+        {
+            compiler.DefineVariable("ЭтотОбъект", "ThisObject", SymbolType.ContextProperty);
             if (externalContext != null)
             {
                 foreach (var item in externalContext)
                 {
-                    compiler.DefineVariable(item.Key, SymbolType.ContextProperty);
+                    compiler.DefineVariable(item.Key, null, SymbolType.ContextProperty);
                 }
             }
 
-            return compiler.CreateModule(code);
+            return compiler.Compile(code);
         }
 
         private static AttachedScriptsFactory _instance;
@@ -172,21 +192,16 @@ namespace ScriptEngine.Machine.Contexts
         {
             _instance = factory;
         }
-
-        public static void Dispose()
-        {
-            _instance = null;
-        }
-
+        
         [ScriptConstructor(ParametrizeWithClassName = true)]
         public static IRuntimeContextInstance ScriptFactory(string typeName, IValue[] arguments)
         {
             var module = _instance._loadedModules[typeName];
 
             var newObj = new UserScriptContextInstance(module, typeName, arguments);
-            newObj.AddProperty("ЭтотОбъект", newObj);
+            newObj.AddProperty("ЭтотОбъект", "ThisObject", newObj);
             newObj.InitOwnData();
-            newObj.Initialize(_instance._engine.Machine);
+            newObj.Initialize();
 
             return newObj;
         }

@@ -232,6 +232,11 @@ namespace ScriptEngine.HostedScript.Library.Http
                 request.Timeout = Timeout * 1000;
             }
 
+            if (uriBuilder.Scheme == HTTPS_SCHEME)
+            {
+                request.ServerCertificateValidationCallback = delegate { return true; };
+            }
+
             return request;
             
         }
@@ -240,7 +245,6 @@ namespace ScriptEngine.HostedScript.Library.Http
         {
             var webRequest = CreateRequest(request.ResourceAddress);
             webRequest.Method = method;
-            webRequest.KeepAlive = false;
             SetRequestHeaders(request, webRequest);
             SetRequestBody(request, webRequest);
 
@@ -279,18 +283,7 @@ namespace ScriptEngine.HostedScript.Library.Http
 
                 using(var requestStream = webRequest.GetRequestStream())
                 {
-                    const int CHUNK_SIZE = 4096;
-                    byte[] buf = new byte[CHUNK_SIZE];
-                    
-                    while(true)
-                    {
-                        int bytesRead = stream.Read(buf, 0, CHUNK_SIZE);
-                        if (bytesRead == 0)
-                            break;
-
-                        requestStream.Write(buf, 0, bytesRead);
-
-                    }
+                    stream.CopyTo(requestStream);
                 }
             }
         }
@@ -304,7 +297,7 @@ namespace ScriptEngine.HostedScript.Library.Http
                 var key = item.Key.AsString();
                 var value = item.Value.AsString();
 
-                switch(key.ToUpperInvariant())
+                switch (key.ToUpperInvariant())
                 {
                     case "CONTENT-TYPE":
                         webRequest.ContentType = value;
@@ -329,7 +322,18 @@ namespace ScriptEngine.HostedScript.Library.Http
                         webRequest.TransferEncoding = value;
                         break;
                     case "CONNECTION":
-                        webRequest.Connection = value;
+                        if (value.Equals("KEEP-ALIVE", StringComparison.OrdinalIgnoreCase))
+                        {
+                            webRequest.KeepAlive = true;
+                        }
+                        else if (value.Equals("CLOSE", StringComparison.OrdinalIgnoreCase))
+                        {
+                            webRequest.KeepAlive = false;
+                        }
+                        else
+                        {
+                            webRequest.Connection = value;
+                        }
                         break;
                     case "DATE":
                         try 
@@ -390,7 +394,7 @@ namespace ScriptEngine.HostedScript.Library.Http
         /// Указание произвольных клиентских и серверных сертификатов в текущей версии не поддерживается.</param>
         /// <param name="useOSAuthentication">Использовать аутентификацию ОС.</param>
         /// <returns></returns>
-        [ScriptConstructor]
+        [ScriptConstructor(Name = "По указанному серверу")]
         public static HttpConnectionContext Constructor(IValue host, 
             IValue port = null, 
             IValue user = null, 

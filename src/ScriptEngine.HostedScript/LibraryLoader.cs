@@ -11,11 +11,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 
 namespace ScriptEngine.HostedScript
 {
-    class LibraryLoader : ScriptDrivenObject
+    public class LibraryLoader : ScriptDrivenObject
     {
         private readonly RuntimeEnvironment _env;
         private readonly ScriptingEngine _engine;
@@ -30,30 +29,22 @@ namespace ScriptEngine.HostedScript
             public string identifier;
             public bool asClass;
         }
-
-        private enum MethodNumbers
+        
+        private LibraryLoader(LoadedModule moduleHandle, RuntimeEnvironment env, ScriptingEngine engine): base(moduleHandle)
         {
-            AddClass,
-            AddProperty,
-            LastNotAMethod
-        }
-
-        private LibraryLoader(LoadedModuleHandle moduleHandle, RuntimeEnvironment _env, ScriptingEngine _engine): base(moduleHandle)
-        {
-            this._env = _env;
-            this._engine = _engine;
-            this._customized = true;
+            _env = env;
+            _engine = engine;
+            _customized = true;
 
             _engine.InitializeSDO(this);
 
         }
 
-        private LibraryLoader(RuntimeEnvironment _env, ScriptingEngine _engine)
-            : base(new LoadedModuleHandle(), true)
+        private LibraryLoader(RuntimeEnvironment env, ScriptingEngine engine)
         {
-            this._env = _env;
-            this._engine = _engine;
-            this._customized = false;
+            _env = env;
+            _engine = engine;
+            _customized = false;
         }
         
         #region Static part
@@ -64,7 +55,7 @@ namespace ScriptEngine.HostedScript
         {
             var code = engine.Loader.FromFile(processingScript);
             var compiler = engine.GetCompilerService();
-            compiler.DefineVariable("ЭтотОбъект", SymbolType.ContextProperty);
+            compiler.DefineVariable("ЭтотОбъект", "ThisObject", SymbolType.ContextProperty);
             
             for (int i = 0; i < _methods.Count; i++)
             {
@@ -72,7 +63,7 @@ namespace ScriptEngine.HostedScript
                 compiler.DefineMethod(mi);
             }
 
-            var module = compiler.CreateModule(code);
+            var module = compiler.Compile(code);
             var loadedModule = engine.LoadModuleImage(module);
 
             return new LibraryLoader(loadedModule, env, engine);
@@ -142,8 +133,20 @@ namespace ScriptEngine.HostedScript
             {
                 return 0;
             }
+            if(StringComparer.OrdinalIgnoreCase.Compare(name, "ThisObject") == 0)
+            {
+                return 0;
+            }
 
             return base.FindOwnProperty(name);
+        }
+
+        protected override string GetOwnPropName(int index)
+        {
+            if (index == 0)
+                return "ЭтотОбъект";
+
+            throw new ArgumentException();
         }
 
         protected override bool IsOwnPropReadable(int index)
@@ -210,8 +213,8 @@ namespace ScriptEngine.HostedScript
         private bool CustomizedProcessing(string libraryPath)
         {
             var libPathValue = ValueFactory.Create(libraryPath);
-            var defaultLoading = Variable.Create(ValueFactory.Create(true));
-            var cancelLoading = Variable.Create(ValueFactory.Create(false));
+            var defaultLoading = Variable.Create(ValueFactory.Create(true), "$internalDefaultLoading");
+            var cancelLoading = Variable.Create(ValueFactory.Create(false), "$internalCancelLoading");
 
             int eventIdx = GetScriptMethod("ПриЗагрузкеБиблиотеки", "OnLibraryLoad");
             if(eventIdx == -1)
@@ -258,7 +261,7 @@ namespace ScriptEngine.HostedScript
                 var compiler = _engine.GetCompilerService();
 
                 var source = _engine.Loader.FromFile(script.path);
-                var module = _engine.AttachedScriptsFactory.CreateModuleFromSource(compiler, source, null);
+                var module = _engine.AttachedScriptsFactory.CompileModuleFromSource(compiler, source, null);
 
                 if(script.asClass)
                 {

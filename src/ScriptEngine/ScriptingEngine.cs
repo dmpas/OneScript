@@ -5,23 +5,27 @@ was not distributed with this file, You can obtain one
 at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
-using ScriptEngine.Compiler;
 using ScriptEngine.Environment;
 using ScriptEngine.Machine;
 using ScriptEngine.Machine.Contexts;
+using ScriptEngine.Compiler;
 
 namespace ScriptEngine
 {
     public class ScriptingEngine : IDisposable
     {
-        private readonly MachineInstance _machine = new MachineInstance();
+        private readonly MachineInstance _machine;
         private readonly ScriptSourceFactory _scriptFactory;
         private AttachedScriptsFactory _attachedScriptsFactory;
+        private IDebugController _debugController;
 
         public ScriptingEngine()
         {
+            _machine = MachineInstance.Current;
+
             TypeManager.Initialize(new StandartTypeManager());
             GlobalsManager.Reset();
             ContextDiscoverer.DiscoverClasses(System.Reflection.Assembly.GetExecutingAssembly());
@@ -29,7 +33,7 @@ namespace ScriptEngine
             _scriptFactory = new ScriptSourceFactory();
         }
 
-        public bool ProduceExtraCode { get; set; }
+        public CodeGenerationFlags ProduceExtraCode { get; set; }
 
         public void AttachAssembly(System.Reflection.Assembly asm)
         {
@@ -48,7 +52,6 @@ namespace ScriptEngine
         {
             SetDefaultEnvironmentIfNeeded();
 
-            var symbolsContext = Environment.SymbolsContext;
             UpdateContexts();
 
             _attachedScriptsFactory = new AttachedScriptsFactory(this);
@@ -57,11 +60,7 @@ namespace ScriptEngine
 
         public void UpdateContexts()
         {
-            _machine.Cleanup();
-            foreach (var item in Environment.AttachedContexts)
-            {
-                _machine.AttachContext(item, false);
-            }
+            Environment.LoadMemory(_machine);
         }
 
         private void SetDefaultEnvironmentIfNeeded()
@@ -87,18 +86,19 @@ namespace ScriptEngine
             cs.DirectiveResolver = DirectiveResolver;
             return cs;
         }
-
-        public LoadedModuleHandle LoadModuleImage(ScriptModuleHandle moduleImage)
+        
+        public IRuntimeContextInstance NewObject(LoadedModule module, ExternalContextData externalContext = null)
         {
-            var handle = new LoadedModuleHandle();
-            handle.Module = new LoadedModule(moduleImage.Module);
-            return handle;
+            var scriptContext = CreateUninitializedSDO(module, externalContext);
+            InitializeSDO(scriptContext);
+
+            return scriptContext;
         }
 
-        internal IRuntimeContextInstance NewObject(LoadedModule module, ExternalContextData externalContext = null)
+        private ScriptDrivenObject CreateUninitializedSDO(LoadedModule module, ExternalContextData externalContext = null)
         {
-            var scriptContext = new Machine.Contexts.UserScriptContextInstance(module, "Сценарий");
-            scriptContext.AddProperty("ЭтотОбъект", scriptContext);
+            var scriptContext = new Machine.Contexts.UserScriptContextInstance(module);
+            scriptContext.AddProperty("ЭтотОбъект", "ThisObject", scriptContext);
             if (externalContext != null)
             {
                 foreach (var item in externalContext)
@@ -108,29 +108,48 @@ namespace ScriptEngine
             }
 
             scriptContext.InitOwnData();
-            InitializeSDO(scriptContext);
-
             return scriptContext;
         }
 
+        [Obsolete]
         public IRuntimeContextInstance NewObject(LoadedModuleHandle module)
         {
             return NewObject(module.Module); 
         }
 
+        [Obsolete]
         public IRuntimeContextInstance NewObject(LoadedModuleHandle module, ExternalContextData externalContext)
         {
             return NewObject(module.Module, externalContext);
         }
 
-        public void InitializeSDO(ScriptDrivenObject sdo)
+        [Obsolete]
+        public LoadedModuleHandle LoadModuleImage(ScriptModuleHandle moduleImage)
         {
-            sdo.Initialize(_machine);
+            var handle = new LoadedModuleHandle();
+            handle.Module = new LoadedModule(moduleImage.Module);
+            return handle;
         }
 
+        public LoadedModule LoadModuleImage(ModuleImage moduleImage)
+        {
+            return new LoadedModule(moduleImage);
+        }
+
+        public void InitializeSDO(ScriptDrivenObject sdo)
+        {
+            sdo.Initialize();
+        }
+
+        [Obsolete]
         public void ExecuteModule(LoadedModuleHandle module)
         {
-            var scriptContext = new Machine.Contexts.UserScriptContextInstance(module.Module);
+            ExecuteModule(module.Module);
+        }
+
+        public void ExecuteModule(LoadedModule module)
+        {
+            var scriptContext = new Machine.Contexts.UserScriptContextInstance(module);
             InitializeSDO(scriptContext);
         }
 
@@ -147,9 +166,23 @@ namespace ScriptEngine
             }
         }
 
+        public IDebugController DebugController
+        {
+            get
+            {
+                return _debugController;
+            }
+            set
+            {
+                _debugController = value;
+                ProduceExtraCode = CodeGenerationFlags.DebugCode;
+                _machine.SetDebugMode(_debugController);
+            }
+        }
+
         public void SetCodeStatisticsCollector(ICodeStatCollector collector)
         {
-            ProduceExtraCode = true;
+            ProduceExtraCode = CodeGenerationFlags.CodeStatistics;
             _machine.SetCodeStatisticsCollector(collector);
         }
 
@@ -157,20 +190,33 @@ namespace ScriptEngine
 
         public void Dispose()
         {
-            AttachedScriptsFactory.Dispose();
+            AttachedScriptsFactory.SetInstance(null);
         }
 
         #endregion
 
         public void CompileEnvironmentModules(RuntimeEnvironment env)
         {
-            var scripts = env.GetUserAddedScripts().Where(x => x.Type == UserAddedScriptType.Module && env.GetGlobalProperty(x.Symbol) == null);
+            var scripts = env.GetUserAddedScripts().Where(x => x.Type == UserAddedScriptType.Module && env.GetGlobalProperty(x.Symbol) == null)
+                             .ToArray();
 
-            foreach (var script in scripts)
+            if (scripts.Length > 0)
             {
-                var loaded = LoadModuleImage(script.Module);
-                var instance = (IValue)NewObject(loaded);
-                env.SetGlobalProperty(script.Symbol, instance);
+                var loadedObjects = new ScriptDrivenObject[scripts.Length];
+                for(var i = 0; i < scripts.Length; i++)
+                {
+                    var script = scripts[i];
+                    var loaded = LoadModuleImage(script.Image);
+
+                    var instance = CreateUninitializedSDO(loaded);
+                    env.SetGlobalProperty(script.Symbol, instance);
+                    loadedObjects[i] = instance;
+                }
+
+                foreach (var instance in loadedObjects)
+                {
+                    InitializeSDO(instance);
+                }
             }
         }
         

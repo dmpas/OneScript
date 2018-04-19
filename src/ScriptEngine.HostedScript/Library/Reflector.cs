@@ -4,10 +4,17 @@ Mozilla Public License, v.2.0. If a copy of the MPL
 was not distributed with this file, You can obtain one 
 at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
+
+using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+
 using ScriptEngine.Machine;
 using ScriptEngine.Machine.Contexts;
 using ScriptEngine.HostedScript.Library.ValueTable;
+
+using MethodInfo = ScriptEngine.Machine.MethodInfo;
 
 namespace ScriptEngine.HostedScript.Library
 {
@@ -19,11 +26,6 @@ namespace ScriptEngine.HostedScript.Library
     [ContextClass("Рефлектор","Reflector")]
     public class ReflectorContext : AutoContext<ReflectorContext>
     {
-        public ReflectorContext()
-        {
-
-        }
-
         /// <summary>
         /// Вызывает метод по его имени.
         /// </summary>
@@ -53,7 +55,10 @@ namespace ScriptEngine.HostedScript.Library
             {
                 for (int i = 0; i < argsToPass.Length; i++)
                 {
-                    arguments.Set(i, argsToPass[i].GetRawValue());
+                    if (i < arguments.Count())
+                    {
+                        arguments.Set(i, argsToPass[i]?.GetRawValue());
+                    }
                 }
             }
 
@@ -62,21 +67,26 @@ namespace ScriptEngine.HostedScript.Library
 
         private static IValue[] GetArgsToPass(ArrayImpl arguments, MethodInfo methInfo)
         {
-            var argsToPass = arguments == null ? new IValue[0] : arguments.ToArray();
-
-            if (methInfo.ArgCount < argsToPass.Length)
-                throw RuntimeException.TooManyArgumentsPassed();
-
-            if (methInfo.ArgCount > argsToPass.Length)
-                throw RuntimeException.TooLittleArgumentsPassed();
-
-            for (int i = 0; i < argsToPass.Length; i++)
+            var argsToPass = new List<IValue>();
+            if (arguments != null)
             {
-                if (!methInfo.Params[i].IsByValue)
-                    argsToPass[i] = Variable.Create(argsToPass[i]);
+                argsToPass.AddRange(arguments);
             }
 
-            return argsToPass;
+            if (methInfo.ArgCount < argsToPass.Count)
+                throw RuntimeException.TooManyArgumentsPassed();
+
+            for (int i = 0; i < argsToPass.Count; i++)
+            {
+                if (!methInfo.Params[i].IsByValue)
+                    argsToPass[i] = Variable.Create(argsToPass[i], $"reflectorArg{i}");
+            }
+            while (argsToPass.Count < methInfo.ArgCount)
+            {
+                argsToPass.Add(null);
+            }
+
+            return argsToPass.ToArray();
         }
 
         /// <summary>
@@ -86,7 +96,18 @@ namespace ScriptEngine.HostedScript.Library
         /// <param name="methodName">Имя метода для вызова</param>
         /// <returns>Истину, если метод существует, и Ложь в обратном случае. </returns>
         [ContextMethod("МетодСуществует", "MethodExists")]
-        public bool MethodExists(IRuntimeContextInstance target, string methodName)
+        public bool MethodExists(IValue target, string methodName)
+        {
+            if(target.DataType == DataType.Object)
+                return MethodExistsForObject(target.AsObject(), methodName);
+
+            if (target.DataType == DataType.Type)
+                return MethodExistsForType(target.GetRawValue() as TypeTypeValue, methodName);
+
+            throw RuntimeException.InvalidArgumentType("target");
+        }
+
+        private static bool MethodExistsForObject(IRuntimeContextInstance target, string methodName)
         {
             try
             {
@@ -99,55 +120,229 @@ namespace ScriptEngine.HostedScript.Library
             }
         }
 
+        private static ValueTable.ValueTable CreateAnnotationTable(AnnotationDefinition[] annotations)
+        {
+            var annotationsTable = new ValueTable.ValueTable();
+            var annotationNameColumn = annotationsTable.Columns.Add("Имя");
+            var annotationParamsColumn = annotationsTable.Columns.Add("Параметры");
+
+            foreach (var annotation in annotations)
+            {
+                var annotationRow = annotationsTable.Add();
+                if (annotation.Name != null)
+                {
+                    annotationRow.Set(annotationNameColumn, ValueFactory.Create(annotation.Name));
+                }
+                if (annotation.ParamCount != 0)
+                {
+                    var parametersTable = new ValueTable.ValueTable();
+                    var parameterNameColumn = parametersTable.Columns.Add("Имя");
+                    var parameterValueColumn = parametersTable.Columns.Add("Значение");
+
+                    annotationRow.Set(annotationParamsColumn, parametersTable);
+
+                    foreach (var annotationParameter in annotation.Parameters)
+                    {
+                        var parameterRow = parametersTable.Add();
+                        if (annotationParameter.Name != null)
+                        {
+                            parameterRow.Set(parameterNameColumn, ValueFactory.Create(annotationParameter.Name));
+                        }
+                        parameterRow.Set(parameterValueColumn, annotationParameter.RuntimeValue);
+                    }
+                }
+            }
+
+            return annotationsTable;
+        }
+
+        private static bool MethodExistsForType(TypeTypeValue type, string methodName)
+        {
+            var clrType = GetReflectableClrType(type);
+            var mapper = CreateMethodsMapper(clrType);
+
+            var actualType = mapper.GetType();
+            int result = (int)actualType.InvokeMember("FindMethod", 
+                BindingFlags.InvokeMethod,
+                null,
+                mapper,
+                new object[]{methodName});
+            return result >= 0;
+        }
+
+        private static object CreateMethodsMapper(Type clrType)
+        {
+            var mapperType = typeof(ContextMethodsMapper<>).MakeGenericType(clrType);
+            var instance = Activator.CreateInstance(mapperType);
+            return instance;
+        }
+
+        private static object CreatePropertiesMapper(Type clrType)
+        {
+            var mapperType = typeof(ContextPropertyMapper<>).MakeGenericType(clrType);
+            var instance = Activator.CreateInstance(mapperType);
+            return instance;
+        }
+
+        private static Type GetReflectableClrType(TypeTypeValue type)
+        {
+            Type clrType;
+            try
+            {
+                clrType = TypeManager.GetImplementingClass(type.Value.ID);
+            }
+            catch (InvalidOperationException)
+            {
+                throw RuntimeException.InvalidArgumentValue("Тип не может быть отражен.");
+            }
+
+            var attrs = clrType.GetCustomAttributes(typeof(ContextClassAttribute), false).ToArray();
+            if (attrs.Length == 0)
+                throw RuntimeException.InvalidArgumentValue("Тип не может быть отражен.");
+
+            return clrType;
+        }
 
         /// <summary>
         /// Получает таблицу методов для переданного объекта..
         /// </summary>
         /// <param name="target">Объект, из которого получаем таблицу методов.</param>
-        /// <returns>Таблица значений с 3 колонками - Имя, КоличествоПараметров, ЭтоФункция. </returns>
+        /// <returns>Таблица значений колонками: Имя, Количество, ЭтоФункция, Аннотации</returns>
         [ContextMethod("ПолучитьТаблицуМетодов", "GetMethodsTable")]
-        public ValueTable.ValueTable GetMethodsTable(IRuntimeContextInstance target)
+        public ValueTable.ValueTable GetMethodsTable(IValue target)
         {
-            ValueTable.ValueTable Result = new ValueTable.ValueTable();
-            
-            var NameColumn = Result.Columns.Add("Имя", TypeDescription.StringType(), "Имя");
-            var CountColumn = Result.Columns.Add("КоличествоПараметров", TypeDescription.IntegerType(), "Количество параметров");
-            var IsFunctionColumn = Result.Columns.Add("ЭтоФункция", TypeDescription.BooleanType(), "Это функция");
+            var result = new ValueTable.ValueTable();
+            if(target.DataType == DataType.Object)
+                FillMethodsTableForObject(target.AsObject(), result);
+            else if (target.DataType == DataType.Type)
+                FillMethodsTableForType(target.GetRawValue() as TypeTypeValue, result);
+            else
+                throw RuntimeException.InvalidArgumentType();
 
-            foreach(var methInfo in target.GetMethods())
+            return result;
+        }
+
+        private static void FillMethodsTableForObject(IRuntimeContextInstance target, ValueTable.ValueTable result)
+        {
+            FillMethodsTable(result, target.GetMethods());
+        }
+
+        private static void FillMethodsTableForType(TypeTypeValue type, ValueTable.ValueTable result)
+        {
+            var clrType = GetReflectableClrType(type);
+            var mapper = CreateMethodsMapper(clrType);
+            var actualType = mapper.GetType();
+            var infos = (IEnumerable<MethodInfo>)actualType.InvokeMember("GetMethods",
+                                                      BindingFlags.InvokeMethod,
+                                                      null,
+                                                      mapper,
+                                                      new object[0]);
+            FillMethodsTable(result, infos);
+        }
+
+        private static void FillPropertiesTableForType(TypeTypeValue type, ValueTable.ValueTable result)
+        {
+            var clrType = GetReflectableClrType(type);
+            var mapper = CreatePropertiesMapper(clrType);
+            var actualType = mapper.GetType();
+            var infos = (IEnumerable<VariableInfo>) actualType.InvokeMember("GetProperties",
+                BindingFlags.InvokeMethod,
+                null,
+                mapper,
+                new object[0]);
+            FillPropertiesTable(result, infos);
+        }
+        
+        private static void FillMethodsTable(ValueTable.ValueTable result, IEnumerable<MethodInfo> methods)
+        {
+            var nameColumn = result.Columns.Add("Имя", TypeDescription.StringType(), "Имя");
+            var countColumn = result.Columns.Add("КоличествоПараметров", TypeDescription.IntegerType(), "Количество параметров");
+            var isFunctionColumn = result.Columns.Add("ЭтоФункция", TypeDescription.BooleanType(), "Это функция");
+            var annotationsColumn = result.Columns.Add("Аннотации", new TypeDescription(), "Аннотации");
+            var paramsColumn = result.Columns.Add("Параметры", new TypeDescription(), "Параметры");
+
+            foreach (var methInfo in methods)
             {
-                ValueTableRow new_row = Result.Add();
-                new_row.Set(NameColumn, ValueFactory.Create(methInfo.Name));
-                new_row.Set(CountColumn, ValueFactory.Create(methInfo.ArgCount));
-                new_row.Set(IsFunctionColumn, ValueFactory.Create(methInfo.IsFunction));
-            }
+                if (!methInfo.IsExport) { continue; }
+                
+                ValueTableRow new_row = result.Add();
+                new_row.Set(nameColumn, ValueFactory.Create(methInfo.Name));
+                new_row.Set(countColumn, ValueFactory.Create(methInfo.ArgCount));
+                new_row.Set(isFunctionColumn, ValueFactory.Create(methInfo.IsFunction));
 
-            return Result;
+                if (methInfo.AnnotationsCount != 0)
+                {
+                    new_row.Set(annotationsColumn, CreateAnnotationTable(methInfo.Annotations));
+                }
+                
+                var paramTable = new ValueTable.ValueTable();
+                var paramNameColumn = paramTable.Columns.Add("Имя", TypeDescription.StringType(), "Имя");
+                var paramByValue = paramTable.Columns.Add("ПоЗначению", TypeDescription.BooleanType(), "По значению");
+                var paramHasDefaultValue = paramTable.Columns.Add("ЕстьЗначениеПоУмолчанию", TypeDescription.BooleanType(), "Есть значение по-умолчанию");
+                var paramAnnotationsColumn = paramTable.Columns.Add("Аннотации", new TypeDescription(), "Аннотации");
+                
+                new_row.Set(paramsColumn, paramTable);
+
+                if (methInfo.ArgCount != 0)
+                {
+                    var index = 0;
+                    foreach (var param in methInfo.Params)
+                    {
+                        var name = string.Format("param{0}", ++index);
+                        var paramRow = paramTable.Add();
+                        paramRow.Set(paramNameColumn, ValueFactory.Create(name));
+                        paramRow.Set(paramByValue, ValueFactory.Create(param.IsByValue));
+                        paramRow.Set(paramHasDefaultValue, ValueFactory.Create(param.HasDefaultValue));
+                        if (param.AnnotationsCount != 0)
+                        {
+                            paramRow.Set(paramAnnotationsColumn, CreateAnnotationTable(param.Annotations));
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>
         /// Получает таблицу свойств для переданного объекта..
         /// </summary>
         /// <param name="target">Объект, из которого получаем таблицу свойств.</param>
-        /// <returns>Таблица значений с 1 колонкой - Имя</returns>
+        /// <returns>Таблица значений с колонками - Имя, Аннотации</returns>
         [ContextMethod("ПолучитьТаблицуСвойств", "GetPropertiesTable")]
-        public ValueTable.ValueTable GetPropertiesTable(IRuntimeContextInstance target)
+        public ValueTable.ValueTable GetPropertiesTable(IValue target)
         {
-            ValueTable.ValueTable Result = new ValueTable.ValueTable();
+            ValueTable.ValueTable result = new ValueTable.ValueTable();
 
-            var NameColumn = Result.Columns.Add("Имя", TypeDescription.StringType(), "Имя");
-
-            var SystemVarNames = new string[] { "этотобъект", "thisobject" };
-
-            foreach (var propInfo in target.GetProperties())
+            if(target.DataType == DataType.Object)
+                FillPropertiesTable(result, target.AsObject().GetProperties());
+            else if (target.DataType == DataType.Type)
             {
-                if (SystemVarNames.Contains(propInfo.Identifier.ToLower())) continue;
-
-                ValueTableRow new_row = Result.Add();
-                new_row.Set(NameColumn, ValueFactory.Create(propInfo.Identifier));
+                var type = target.GetRawValue() as TypeTypeValue;
+                FillPropertiesTableForType(type, result);
             }
+            else
+                throw RuntimeException.InvalidArgumentType();
 
-            return Result;
+            return result;
+        }
+
+        private static void FillPropertiesTable(ValueTable.ValueTable result, IEnumerable<VariableInfo> properties)
+        {
+            var nameColumn = result.Columns.Add("Имя", TypeDescription.StringType(), "Имя");
+            var annotationsColumn = result.Columns.Add("Аннотации", new TypeDescription(), "Аннотации");
+            var systemVarNames = new string[] { "этотобъект", "thisobject" };
+
+            foreach (var propInfo in properties)
+            {
+                if (systemVarNames.Contains(propInfo.Identifier.ToLower())) continue;
+
+                ValueTableRow new_row = result.Add();
+                new_row.Set(nameColumn, ValueFactory.Create(propInfo.Identifier));
+
+                if (propInfo.AnnotationsCount != 0)
+                {
+                    new_row.Set(annotationsColumn, CreateAnnotationTable(propInfo.Annotations));
+                }
+            }
         }
 
         [ScriptConstructor]
