@@ -18,7 +18,7 @@ $packageArgs = @{
 
   registryUninstallerKey = 'onescript'
   # 1.0.20 exe
-  checksum      = 'ee009cb6dda3ae69444d4793645cfe10491a192e1e5e16fb3b514b747f0ccabe'
+  checksum      = '3a3e13423f171b26e7123218c1b1481d2ece3aa788b68f3ff6f75493f12df95c'
   checksumType  = 'sha256'
   checksum64    = ''
   checksumType64= 'sha256'
