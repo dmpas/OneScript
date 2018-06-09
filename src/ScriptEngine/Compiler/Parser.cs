@@ -21,6 +21,7 @@ namespace ScriptEngine.Compiler
         private readonly ParserState _operatorState = new OperatorParserState();
         private readonly ParserState _dateState = new DateParserState();
         private readonly ParserState _directiveState = new DirectiveParserState();
+        private readonly ParserState _annotationState = new AnnotationParserState();
 
         public string Code { get; set; }
 
@@ -84,6 +85,12 @@ namespace ScriptEngine.Compiler
                     else if(cs == SpecialChars.Directive)
                     {
                         state = _directiveState;
+                    }
+                    else if (cs == '&')
+                    {
+                        _iterator.GetContents();
+                        _iterator.MoveNext();
+                        state = _annotationState;
                     }
                     else
                     {
@@ -166,7 +173,8 @@ namespace ScriptEngine.Compiler
         NullLiteral,
         EndOperator,
         EndOfText,
-        Directive
+        Directive,
+        Annotation
     }
 
     abstract class ParserState
@@ -293,18 +301,9 @@ namespace ScriptEngine.Compiler
 
                 if (!iterator.MoveNext())
                 {
-                    if (isEndOfText)
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        isEndOfText = true;
-                    }
+                    isEndOfText = true;
                 }
             }
-
-            return Lexem.Empty();
         }
     }
 
@@ -402,6 +401,28 @@ namespace ScriptEngine.Compiler
 
     class DateParserState : ParserState
     {
+        private string FullDateTimeString( StringBuilder numbers )
+        {
+            if (numbers.Length == 12) // yyyyMMddHHmm
+            {
+                numbers.Append("00");
+            }
+            if (numbers.Length == 8) // yyyyMMdd
+            {
+                numbers.Append("000000");
+            }
+            else if (numbers.Length != 14) // yyyyMMddHHmmss
+            {
+                throw new FormatException();
+            }
+
+            string date = numbers.ToString();
+ 
+            DateTime.ParseExact(date, "yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+
+            return date;
+        }
+
         public override Lexem ReadNextLexem(ParseIterator iterator)
         {
             var numbers = new StringBuilder();
@@ -414,16 +435,23 @@ namespace ScriptEngine.Compiler
                     iterator.GetContents(1, 1);
                     iterator.MoveNext();
 
-                    var lex = new Lexem()
+                    try
                     {
-                        Type = LexemType.DateLiteral,
-                        Content = numbers.ToString()
-                    };
+                        var lex = new Lexem()
+                        {
+                            Type = LexemType.DateLiteral,
+                            Content = FullDateTimeString(numbers)
+                        };
 
-                    return lex;
+                        return lex;
+                    }
+                    catch( FormatException )
+                    {
+                        throw CreateExceptionOnCurrentLine("Некорректный литерал даты", iterator);
+                    }
                 }
 
-                if(Char.IsDigit(cs))
+                if (Char.IsDigit(cs))
                 {
                     numbers.Append(cs);
                 }
@@ -593,6 +621,17 @@ namespace ScriptEngine.Compiler
             return lex;
         }
 
+    }
+
+    class AnnotationParserState : ParserState
+    {
+        public override Lexem ReadNextLexem(ParseIterator iterator)
+        {
+            var word = new WordParserState();
+            var lexem = word.ReadNextLexem(iterator);
+            lexem.Type = LexemType.Annotation;
+            return lexem;
+        }
     }
 
 }

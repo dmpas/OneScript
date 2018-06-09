@@ -21,6 +21,8 @@ namespace ScriptEngine.Compiler
     }
 
     class Compiler    {
+        public const string BODY_METHOD_NAME = "$entry";
+
         private static readonly Dictionary<Token, OperationCode> _tokenToOpCode;
 
         private Parser _parser;
@@ -37,6 +39,7 @@ namespace ScriptEngine.Compiler
         private readonly Stack<Token[]> _tokenStack = new Stack<Token[]>();
         private readonly Stack<NestedLoopInfo> _nestedLoops = new Stack<NestedLoopInfo>();
         private readonly List<ForwardedMethodDecl> _forwardedMethods = new List<ForwardedMethodDecl>();
+        private readonly List<AnnotationDefinition> _annotations = new List<AnnotationDefinition>();
 
         private struct ForwardedMethodDecl
         {
@@ -69,6 +72,7 @@ namespace ScriptEngine.Compiler
         public ModuleImage Compile(Parser parser, ICompilerContext context)
         {
             _module = new ModuleImage();
+            _module.LoadAddress = context.TopIndex();
             _ctx = context;
             _parser = parser;
             _parser.Start();
@@ -82,6 +86,7 @@ namespace ScriptEngine.Compiler
         public ModuleImage CompileExpression(Parser parser, ICompilerContext context)
         {
             _module = new ModuleImage();
+            _module.LoadAddress = context.TopIndex();
             _ctx = context;
             _parser = parser;
             _parser.Start();
@@ -94,14 +99,84 @@ namespace ScriptEngine.Compiler
         public ModuleImage CompileExecBatch(Parser parser, ICompilerContext context)
         {
             _module = new ModuleImage();
+            _module.LoadAddress = context.TopIndex();
             _ctx = context;
             _parser = parser;
             _parser.Start();
             NextToken();
             PushStructureToken(Token.EndOfText);
-            BuildCodeBatch();
+            BuildModuleBody();
 
             return _module;
+        }
+
+        private AnnotationParameter BuildAnnotationParameter()
+        {
+            // id | id = value | value
+            var result = new AnnotationParameter();
+            if (_lastExtractedLexem.Type == LexemType.Identifier)
+            {
+                result.Name = _lastExtractedLexem.Content;
+                NextToken();
+                if (_lastExtractedLexem.Token != Token.Equal)
+                {
+                    result.ValueIndex = AnnotationParameter.UNDEFINED_VALUE_INDEX;
+                    return result;
+                }
+                NextToken();
+            }
+            
+            var cDef = CreateConstDefinition(ref _lastExtractedLexem);
+            result.ValueIndex = GetConstNumber(ref cDef);
+            
+            NextToken();
+            
+            return result;
+        }
+
+        private IList<AnnotationParameter> BuildAnnotationParameters()
+        {
+            var parameters = new List<AnnotationParameter>();
+            while (_lastExtractedLexem.Token != Token.EndOfText)
+            {
+                parameters.Add(BuildAnnotationParameter());
+                if (_lastExtractedLexem.Token == Token.Comma)
+                {
+                    NextToken();
+                    continue;
+                }
+                if (_lastExtractedLexem.Token == Token.ClosePar)
+                {
+                    NextToken();
+                    break;
+                }
+                throw CompilerException.UnexpectedOperation();
+            }
+            return parameters;
+        }
+
+        private void BuildAnnotations()
+        {
+            while (_lastExtractedLexem.Type == LexemType.Annotation)
+            {
+                var annotation = new AnnotationDefinition() {Name = _lastExtractedLexem.Content};
+
+                NextToken();
+                if (_lastExtractedLexem.Token == Token.OpenPar)
+                {
+                    NextToken();
+                    annotation.Parameters = BuildAnnotationParameters().ToArray();
+                }
+                
+                _annotations.Add(annotation);
+            }
+        }
+
+        private AnnotationDefinition[] ExtractAnnotations()
+        {
+            var result = _annotations.ToArray();
+            _annotations.Clear();
+            return result;
         }
 
         private void BuildModule()
@@ -210,6 +285,10 @@ namespace ScriptEngine.Compiler
                     HandleDirective(isCodeEntered);
                     UpdateCompositeContext(); // костыль для #330
                 }
+                else if (_lastExtractedLexem.Type == LexemType.Annotation)
+                {
+                    BuildAnnotations();
+                }
                 else
                 {
                     throw CompilerException.UnexpectedOperation();
@@ -235,6 +314,7 @@ namespace ScriptEngine.Compiler
                     if (IsUserSymbol(ref _lastExtractedLexem))
                     {
                         var symbolicName = _lastExtractedLexem.Content;
+                        var annotations = ExtractAnnotations();
                         var definition = _ctx.DefineVariable(symbolicName);
                         if (_inMethodScope)
                         {
@@ -251,7 +331,14 @@ namespace ScriptEngine.Compiler
                             }
 
                             _module.VariableRefs.Add(definition);
-                            _module.Variables.Add(symbolicName);
+                            _module.Variables.Add(new VariableInfo()
+                            {
+                                Identifier = symbolicName,
+                                Annotations = annotations,
+                                CanGet = true,
+                                CanSet = true,
+                                Index = definition.CodeIndex
+                            });
                         }
                         NextToken();
                         if (_lastExtractedLexem.Token == Token.Export)
@@ -310,7 +397,7 @@ namespace ScriptEngine.Compiler
             if (entry != _module.Code.Count)
             {
                 var bodyMethod = new MethodInfo();
-                bodyMethod.Name = "$entry";
+                bodyMethod.Name = BODY_METHOD_NAME;
                 var descriptor = new MethodDescriptor();
                 descriptor.EntryPoint = entry;
                 descriptor.Signature = bodyMethod;
@@ -334,7 +421,7 @@ namespace ScriptEngine.Compiler
 
             for (int i = 0; i < localCtx.VariableCount; i++)
             {
-                descriptor.Variables.Add(localCtx.GetVariable(i).Identifier);
+                descriptor.Variables.Add(localCtx.GetVariable(i));
             }
             
         }
@@ -390,6 +477,7 @@ namespace ScriptEngine.Compiler
             MethodInfo method = new MethodInfo();
             method.Name = _lastExtractedLexem.Content;
             method.IsFunction = _isFunctionProcessed;
+            method.Annotations = ExtractAnnotations();
 
             NextToken();
             if (_lastExtractedLexem.Token != Token.OpenPar)
@@ -501,6 +589,12 @@ namespace ScriptEngine.Compiler
         {
             var param = new ParameterDefinition();
             
+            if (_lastExtractedLexem.Type == LexemType.Annotation)
+            {
+                BuildAnnotations();
+                param.Annotations = ExtractAnnotations();
+            }
+            
             if (_lastExtractedLexem.Token == Token.ByValParam)
             {
                 param.IsByValue = true;
@@ -528,21 +622,47 @@ namespace ScriptEngine.Compiler
             if (_lastExtractedLexem.Token == Token.Equal)
             {
                 param.HasDefaultValue = true;
-                NextToken();
-                if (IsLiteral(ref _lastExtractedLexem))
-                {
-                    var cd = CreateConstDefinition(ref _lastExtractedLexem);
-                    var num = GetConstNumber(ref cd);
-                    param.DefaultValueIndex = num;
-                    NextToken();
-                }
-                else
-                {
-                    throw CompilerException.UnexpectedOperation();
-                }
+                param.DefaultValueIndex = BuildDefaultParameterValue();
             }
 
             return param;
+        }
+
+        private int BuildDefaultParameterValue()
+        {
+            NextToken();
+
+            bool hasSign = false;
+            bool signIsMinus = _lastExtractedLexem.Token == Token.Minus;
+            if (signIsMinus || _lastExtractedLexem.Token == Token.Plus)
+            {
+                hasSign = true;
+                NextToken();
+            }
+
+            if (IsLiteral(ref _lastExtractedLexem))
+            {
+                var cd = CreateConstDefinition(ref _lastExtractedLexem);
+                if (hasSign)
+                {
+                    if (_lastExtractedLexem.Type == LexemType.NumberLiteral && signIsMinus)
+                    {
+                        cd.Presentation = '-' + cd.Presentation;
+                    }
+                    else if (_lastExtractedLexem.Type == LexemType.StringLiteral
+                          || _lastExtractedLexem.Type == LexemType.DateLiteral)
+                    {
+                        throw CompilerException.NumberExpected();
+                    }
+                }
+
+                NextToken();
+                return GetConstNumber(ref cd);
+            }
+            else
+            {
+                throw CompilerException.LiteralExpected();
+            }
         }
 
         private void DispatchMethodBody()
@@ -1345,6 +1465,7 @@ namespace ScriptEngine.Compiler
             else if (_lastExtractedLexem.Token == Token.Question)
             {
                 BuildQuestionOperator();
+                BuildContinuationRightHand();
             }
             else
             {
@@ -1585,9 +1706,9 @@ namespace ScriptEngine.Compiler
 
         private void BuildLoadVariable(string identifier)
         {
-            try
+            var hasVar = _ctx.TryGetVariable(identifier, out var varBinding);
+            if (hasVar)
             {
-                var varBinding = _ctx.GetVariable(identifier);
                 if (varBinding.binding.ContextIndex == _ctx.TopIndex())
                 {
                     AddCommand(OperationCode.LoadLoc, varBinding.binding.CodeIndex);
@@ -1598,7 +1719,7 @@ namespace ScriptEngine.Compiler
                     AddCommand(OperationCode.LoadVar, num);
                 }
             }
-            catch (SymbolNotFoundException)
+            else
             {
                 // can create variable
                 var binding = _ctx.DefineVariable(identifier);
@@ -1623,11 +1744,11 @@ namespace ScriptEngine.Compiler
 
         private void BuildMethodCall(string identifier, bool[] argsPassed, bool asFunction)
         {
-            try
+            var hasMethod = _ctx.TryGetMethod(identifier, out var methBinding);
+            if (hasMethod)
             {
-                var methBinding = _ctx.GetMethod(identifier);
                 var scope = _ctx.GetScope(methBinding.ContextIndex);
-                
+
                 // dynamic scope checks signatures only at runtime
                 if (!scope.IsDynamicScope)
                 {
@@ -1639,13 +1760,12 @@ namespace ScriptEngine.Compiler
                     CheckFactArguments(methInfo, argsPassed);
                 }
 
-                if(asFunction)
+                if (asFunction)
                     AddCommand(OperationCode.CallFunc, GetMethodRefNumber(ref methBinding));
                 else
-                    AddCommand(OperationCode.CallProc, GetMethodRefNumber(ref methBinding));
-
+                    AddCommand(OperationCode.CallProc, GetMethodRefNumber(ref methBinding)); 
             }
-            catch (SymbolNotFoundException)
+            else
             {
                 // can be defined later
                 var forwarded = new ForwardedMethodDecl();
