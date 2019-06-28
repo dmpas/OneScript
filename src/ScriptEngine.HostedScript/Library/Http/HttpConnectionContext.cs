@@ -60,7 +60,7 @@ namespace ScriptEngine.HostedScript.Library.Http
             Timeout = timeout;
             _proxy = proxy;
             UseOSAuthentication = useOSAuth;
-            
+            AllowAutoRedirect = true;
         }
 
         [ContextProperty("ИспользоватьАутентификациюОС", "UseOSAuthentication", CanWrite=false)]
@@ -112,6 +112,9 @@ namespace ScriptEngine.HostedScript.Library.Http
         {
             get; private set;
         }
+
+        [ContextProperty("РазрешитьАвтоматическоеПеренаправление", "AllowAutoRedirect")]
+        public bool AllowAutoRedirect { get; set; }
 
         /// <summary>
         /// Получить данные методом GET
@@ -195,14 +198,24 @@ namespace ScriptEngine.HostedScript.Library.Http
         }
 
         private HttpWebRequest CreateRequest(string resource)
-        {
+        {http://qaru.site/questions/45913/the-request-was-aborted-could-not-create-ssltls-secure-channel
+
             var uriBuilder = new UriBuilder(_hostUri);
             if(Port != 0)
                 uriBuilder.Port = Port;
             
             var resourceUri = new Uri(uriBuilder.Uri, resource);
 
+            // http://qaru.site/questions/45913/the-request-was-aborted-could-not-create-ssltls-secure-channel
+            // Убедитесь, что настройки ServicePointManager заданы до создания HttpWebRequest, 
+            // иначе он не будет работать
+            if (uriBuilder.Scheme == HTTPS_SCHEME)
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
+            }
+
             var request = (HttpWebRequest)HttpWebRequest.Create(resourceUri);
+            request.AutomaticDecompression = DecompressionMethods.GZip;
             if (User != "" || Password != "")
             {
                 request.Credentials = new NetworkCredential(User, Password);
@@ -244,6 +257,7 @@ namespace ScriptEngine.HostedScript.Library.Http
         private HttpResponseContext GetResponse(HttpRequestContext request, string method, string output = null)
         {
             var webRequest = CreateRequest(request.ResourceAddress);
+            webRequest.AllowAutoRedirect = AllowAutoRedirect;
             webRequest.Method = method;
             SetRequestHeaders(request, webRequest);
             SetRequestBody(request, webRequest);

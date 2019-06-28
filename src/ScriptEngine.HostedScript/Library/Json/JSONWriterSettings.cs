@@ -36,7 +36,7 @@ namespace ScriptEngine.HostedScript.Library.Json
 
         private bool _escapeAngleBrackets;
 
-        public JSONWriterSettings(IValue NewLines = null, string PaddingSymbols = null, bool UseDoubleQuotes = true, IValue EscapeCharacters = null, bool EscapeAngleBrackets = false, bool EscapeLineTerminators = false, bool EscapeAmpersand = false, bool EscapeSingleQuotes = false, bool EscapeSlash = false)
+        public JSONWriterSettings(IValue NewLines = null, string PaddingSymbols = null, bool UseDoubleQuotes = true, IValue EscapeCharacters = null, bool EscapeAngleBrackets = false, bool EscapeLineTerminators = true, bool EscapeAmpersand = false, bool EscapeSingleQuotes = false, bool EscapeSlash = false)
         {
             _newLines = NewLines;
             _paddingSymbols = PaddingSymbols;
@@ -85,17 +85,17 @@ namespace ScriptEngine.HostedScript.Library.Json
         /// Определяет, будет ли экранироваться слеш (косая черта) при записи значения.
         /// Значение по умолчанию: Ложь. </param>
         [ScriptConstructor(Name = "По описанию параметров записи")]
-        public static IRuntimeContextInstance Constructor(IValue newLines = null, IValue paddingSymbols = null, IValue useDoubleQuotes = null, IValue escapeCharacters = null, IValue escapeAngleBrackets = null, IValue escapeLineTerminators = null, IValue escapeAmpersand = null, IValue escapeSingleQuotes = null, IValue escapeSlash = null)
+        public static JSONWriterSettings Constructor(IValue newLines = null, IValue paddingSymbols = null, IValue useDoubleQuotes = null, IValue escapeCharacters = null, IValue escapeAngleBrackets = null, IValue escapeLineTerminators = null, IValue escapeAmpersand = null, IValue escapeSingleQuotes = null, IValue escapeSlash = null)
         {
             return new JSONWriterSettings(newLines,
                                           (paddingSymbols == null ? null : paddingSymbols.AsString()),
                                           (useDoubleQuotes == null? true: useDoubleQuotes.AsBoolean()),
                                           escapeCharacters,
-                                          (escapeAngleBrackets == null ? true : escapeAngleBrackets.AsBoolean()),
+                                          (escapeAngleBrackets == null ? false : escapeAngleBrackets.AsBoolean()),
                                           (escapeLineTerminators == null ? true : escapeLineTerminators.AsBoolean()),
-                                          (escapeAmpersand == null ? true : escapeAmpersand.AsBoolean()),
-                                          (escapeSingleQuotes == null ? true : escapeSingleQuotes.AsBoolean()),
-                                          (escapeSlash == null ? true : escapeSlash.AsBoolean()));
+                                          (escapeAmpersand == null ? false : escapeAmpersand.AsBoolean()),
+                                          (escapeSingleQuotes == null ? false : escapeSingleQuotes.AsBoolean()),
+                                          (escapeSlash == null ? false : escapeSlash.AsBoolean()));
         }
 
         /// <summary>
@@ -104,7 +104,7 @@ namespace ScriptEngine.HostedScript.Library.Json
         /// </summary>
         ///
         [ScriptConstructor]
-        public static IRuntimeContextInstance Constructor()
+        public static JSONWriterSettings Constructor()
         {
             return new JSONWriterSettings();
         }

@@ -4,7 +4,7 @@ pipeline {
     agent none
 
     environment {
-        ReleaseNumber = 20
+        ReleaseNumber = '1.2.0'
         outputEnc = '65001'
     }
 
@@ -42,9 +42,9 @@ pipeline {
                     withSonarQubeEnv('silverbulleters') {
                         script {
                             def sqScannerMsBuildHome = tool 'sonar-scanner for msbuild';
-                            sqScannerMsBuildHome = sqScannerMsBuildHome + "\\SonarQube.Scanner.MSBuild.exe";
-                            def sonarcommandStart = "@" + sqScannerMsBuildHome + " begin /k:1script /n:OneScript /v:\"1.0.${env.ReleaseNumber}\"";
-                            def makeAnalyzis = true
+                            sqScannerMsBuildHome = sqScannerMsBuildHome + "\\SonarScanner.MSBuild.exe";
+                            def sonarcommandStart = "@" + sqScannerMsBuildHome + " begin /k:1script /n:OneScript /v:\"${env.ReleaseNumber}\" /d:sonar.verbose=true /d:sonar.exclusions=src/ASPNETHandler/**/*,tests/**/*";
+                            def makeAnalyzis = false
                             if (env.BRANCH_NAME == "develop") {
                                 echo 'Analysing develop branch'
                             } else if (env.BRANCH_NAME.startsWith("PR-")) {
@@ -273,7 +273,7 @@ pipeline {
                 TARGET="/var/www/oscript.io/download/versions/latest/"
                 sudo rsync -rv --delete --exclude mddoc*.zip --exclude *.src.rpm . \$TARGET
                 
-                TARGET="/var/www/oscript.io/download/versions/1_0_$ReleaseNumber/"
+                TARGET="/var/www/oscript.io/download/versions/${ReleaseNumber.replace('.', '_')}/"
                 sudo rsync -rv --delete --exclude mddoc*.zip --exclude *.src.rpm . \$TARGET
 
                 """.stripIndent()

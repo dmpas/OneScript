@@ -206,6 +206,10 @@ namespace ScriptEngine.Machine.Contexts
             {
                 return ValueFactory.Create((decimal)(double)objParam);
             }
+            else if (type == typeof(Single))
+            {
+                return ValueFactory.Create((decimal)System.Convert.ToDouble(objParam));
+            }
             else if (type == typeof(decimal))
             {
                 return ValueFactory.Create((decimal)objParam);
@@ -309,7 +313,7 @@ namespace ScriptEngine.Machine.Contexts
         }
 
         [ScriptConstructor]
-        public static IRuntimeContextInstance Constructor(IValue[] args)
+        public static COMWrapperContext Constructor(IValue[] args)
         {
             return COMWrapperContext.Create(args[0].AsString(), args.Skip(1).ToArray());
         }
