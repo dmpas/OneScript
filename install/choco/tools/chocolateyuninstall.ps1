@@ -26,7 +26,7 @@ if ($file -eq $null -or $file -eq '') {
 }
 
 # The below is somewhat naive and built for MSI installers
-$installerType = 'MSI' 
+$installerType = 'EXE' 
 # The Product Code GUID is all that should be passed for MSI, and very FIRST,
 # because it comes directly after /x, which is already set in the 
 # Uninstall-ChocolateyPackage msiargs (facepalm).
