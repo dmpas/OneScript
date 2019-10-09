@@ -44,14 +44,14 @@ Source: "{#ArtifactRoot}\bin\oscript.exe"; DestDir: "{app}\bin"; Components: mai
 Source: "{#ArtifactRoot}\bin\ScriptEngine.HostedScript.dll"; DestDir: "{app}\bin"; Components: main
 Source: "{#ArtifactRoot}\bin\ScriptEngine.dll"; DestDir: "{app}\bin"; Components: main
 Source: "{#ArtifactRoot}\bin\OneScript.DebugProtocol.dll"; DestDir: "{app}\bin"; Components: main
-Source: "{#ArtifactRoot}\bin\Ionic.Zip.dll"; DestDir: "{app}\bin"; Components: main
+Source: "{#ArtifactRoot}\bin\DotNetZip.dll"; DestDir: "{app}\bin"; Components: main
 Source: "{#ArtifactRoot}\bin\Newtonsoft.Json.dll"; DestDir: "{app}\bin"; Components: main
 Source: "{#ArtifactRoot}\bin\oscript.cfg"; DestDir: "{app}\bin"; Components: main; Flags: onlyifdoesntexist
 
 Source: "{#ArtifactRoot}\examples\*"; DestDir: "{app}\examples"; Components: main
 
 ;isapi
-Source: "{#ArtifactRoot}\bin\HTTPServices.dll"; DestDir: "{app}\bin"; Components: isapi;
+Source: "{#ArtifactRoot}\bin\ASPNETHandler.dll"; DestDir: "{app}\bin"; Components: isapi;
 
 ; testapp
 Source: "{#ArtifactRoot}\bin\TestApp.exe"; DestDir: "{app}\bin"; Components: testapp

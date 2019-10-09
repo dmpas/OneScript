@@ -60,7 +60,7 @@ namespace ScriptEngine.HostedScript.Library.Http
             Timeout = timeout;
             _proxy = proxy;
             UseOSAuthentication = useOSAuth;
-            
+            AllowAutoRedirect = true;
         }
 
         [ContextProperty("ИспользоватьАутентификациюОС", "UseOSAuthentication", CanWrite=false)]
@@ -112,6 +112,9 @@ namespace ScriptEngine.HostedScript.Library.Http
         {
             get; private set;
         }
+
+        [ContextProperty("РазрешитьАвтоматическоеПеренаправление", "AllowAutoRedirect")]
+        public bool AllowAutoRedirect { get; set; }
 
         /// <summary>
         /// Получить данные методом GET
@@ -202,7 +205,16 @@ namespace ScriptEngine.HostedScript.Library.Http
             
             var resourceUri = new Uri(uriBuilder.Uri, resource);
 
+            // http://qaru.site/questions/45913/the-request-was-aborted-could-not-create-ssltls-secure-channel
+            // Убедитесь, что настройки ServicePointManager заданы до создания HttpWebRequest, 
+            // иначе он не будет работать
+            if (uriBuilder.Scheme == HTTPS_SCHEME)
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
+            }
+
             var request = (HttpWebRequest)HttpWebRequest.Create(resourceUri);
+            request.AutomaticDecompression = DecompressionMethods.GZip;
             if (User != "" || Password != "")
             {
                 request.Credentials = new NetworkCredential(User, Password);
@@ -244,8 +256,8 @@ namespace ScriptEngine.HostedScript.Library.Http
         private HttpResponseContext GetResponse(HttpRequestContext request, string method, string output = null)
         {
             var webRequest = CreateRequest(request.ResourceAddress);
+            webRequest.AllowAutoRedirect = AllowAutoRedirect;
             webRequest.Method = method;
-            webRequest.KeepAlive = false;
             SetRequestHeaders(request, webRequest);
             SetRequestBody(request, webRequest);
 
@@ -298,7 +310,7 @@ namespace ScriptEngine.HostedScript.Library.Http
                 var key = item.Key.AsString();
                 var value = item.Value.AsString();
 
-                switch(key.ToUpperInvariant())
+                switch (key.ToUpperInvariant())
                 {
                     case "CONTENT-TYPE":
                         webRequest.ContentType = value;
@@ -323,7 +335,18 @@ namespace ScriptEngine.HostedScript.Library.Http
                         webRequest.TransferEncoding = value;
                         break;
                     case "CONNECTION":
-                        webRequest.Connection = value;
+                        if (value.Equals("KEEP-ALIVE", StringComparison.OrdinalIgnoreCase))
+                        {
+                            webRequest.KeepAlive = true;
+                        }
+                        else if (value.Equals("CLOSE", StringComparison.OrdinalIgnoreCase))
+                        {
+                            webRequest.KeepAlive = false;
+                        }
+                        else
+                        {
+                            webRequest.Connection = value;
+                        }
                         break;
                     case "DATE":
                         try 

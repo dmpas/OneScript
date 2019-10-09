@@ -9,7 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-
+using OneScript.Language;
 using ScriptEngine;
 using ScriptEngine.HostedScript;
 using ScriptEngine.Machine;
@@ -57,10 +57,10 @@ namespace oscript
 				{
 					var envCompiler = hostedScript.GetCompilerService();
 					var envSrc = hostedScript.Loader.FromFile(_envFile);
-					envCompiler.CreateModule(envSrc);
+					envCompiler.Compile(envSrc);
 				}
 				var compiler = hostedScript.GetCompilerService();
-				compiler.CreateModule(source);
+				compiler.Compile(source);
 			}
 			catch (ScriptException e)
 			{

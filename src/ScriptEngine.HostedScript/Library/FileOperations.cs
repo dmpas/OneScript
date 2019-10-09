@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Security;
 using System.Text;
 
@@ -27,7 +28,17 @@ namespace ScriptEngine.HostedScript.Library
         [ContextMethod("КопироватьФайл", "CopyFile")]
         public void CopyFile(string source, string destination)
         {
-            System.IO.File.Copy(source, destination, true);
+            var scheme = PathScheme(source);
+
+            if(scheme == Uri.UriSchemeHttp || scheme == Uri.UriSchemeHttps)
+                DownloadFromRemote<HttpWebRequest>(source, 
+                    destination, WebRequestMethods.Http.Get);
+            else if(scheme == Uri.UriSchemeFtp)
+                DownloadFromRemote<FtpWebRequest>(source, 
+                    destination, WebRequestMethods.Ftp.DownloadFile);
+            else
+                File.Copy(source, destination, true);
+
         }
 
         /// <summary>
@@ -38,7 +49,50 @@ namespace ScriptEngine.HostedScript.Library
         [ContextMethod("ПереместитьФайл", "MoveFile")]
         public void MoveFile(string source, string destination)
         {
-            System.IO.File.Move(source, destination);
+            var scheme = PathScheme(source);
+
+            if (scheme == Uri.UriSchemeHttp || scheme == Uri.UriSchemeHttps)
+            {
+                DownloadFromRemote<HttpWebRequest>(source,
+                    destination, WebRequestMethods.Http.Get);
+                DeleteFromRemote<HttpWebRequest>(source, "DELETE");
+            }
+            else if (scheme == Uri.UriSchemeFtp)
+            {
+                DownloadFromRemote<FtpWebRequest>(source,
+                    destination, WebRequestMethods.Ftp.DownloadFile);
+                DeleteFromRemote<FtpWebRequest>(source, WebRequestMethods.Ftp.DeleteFile);
+            }
+            else
+                File.Move(source, destination);
+        }
+
+        public string PathScheme(string path)
+        {
+            if(Uri.TryCreate(path, UriKind.RelativeOrAbsolute, out Uri uri))
+            {
+                return uri.Scheme;
+            }
+            return Uri.UriSchemeFile;
+        }
+
+        private void DownloadFromRemote<T>(string source,
+            string destination, string method) where T: WebRequest
+        {
+            var req = (T)WebRequest.Create(source);
+            req.Method = method;
+
+            using (var respStream = req.GetResponse().GetResponseStream())
+                using (var fs = File.Create(destination))
+                    respStream.CopyTo(fs);
+        }
+
+        private void DeleteFromRemote<T>(string source, string method) where T : WebRequest
+        {
+            var req = (T)WebRequest.Create(source);
+            req.Method = method;
+
+            using (var resp = req.GetResponse()) { };
         }
 
         /// <summary>
@@ -81,7 +135,7 @@ namespace ScriptEngine.HostedScript.Library
         /// <param name="recursive">Флаг рекурсивного поиска в поддиректориях</param>
         /// <returns>Массив объектов Файл, которые были найдены.</returns>
         [ContextMethod("НайтиФайлы", "FindFiles")]
-        public IRuntimeContextInstance FindFiles(string dir, string mask = null, bool recursive = false)
+        public ArrayImpl FindFiles(string dir, string mask = null, bool recursive = false)
         {
             if (mask == null)
             {
@@ -189,7 +243,7 @@ namespace ScriptEngine.HostedScript.Library
         /// <param name="path">Каталог из которого удаляются файлы, или сам файл.</param>
         /// <param name="mask">Маска файлов. Необязательный параметр. Если указан, то первый параметр трактуется, как каталог.</param>
         [ContextMethod("УдалитьФайлы", "DeleteFiles")]
-        public void DeleteFiles(string path, string mask = "")
+        public void DeleteFiles(string path, string mask = null)
         {
             if (mask == null)
             {

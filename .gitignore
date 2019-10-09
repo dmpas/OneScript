@@ -1,5 +1,8 @@
 .vs/
 .idea/
+.DS_Store
+.vscode/
+tmp/
 
 *.vssscc
 *.vspscc
@@ -59,3 +62,7 @@ src/DebugServer/node_modules/
 src/OpenCover
 TestResult.xml
 tests/component/Component.dll
+
+src/oscript/Properties/launchSettings\.json
+
+*.DotSettings

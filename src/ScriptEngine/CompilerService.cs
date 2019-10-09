@@ -6,6 +6,8 @@ at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
 using System;
 using System.Collections.Generic;
+using OneScript.Language;
+using OneScript.Language.LexicalAnalysis;
 using ScriptEngine.Compiler;
 using ScriptEngine.Environment;
 using ScriptEngine.Machine;
@@ -16,9 +18,10 @@ namespace ScriptEngine
     {
         SymbolScope _scope;
 
-        readonly ModuleCompilerContext _currentContext;
-
-        readonly List<int> _predefinedVariables = new List<int>();
+        private readonly ModuleCompilerContext _currentContext;
+        private readonly List<int> _predefinedVariables = new List<int>();
+        private readonly List<string> _preprocessorVariables = new List<string>();
+        
 
         internal CompilerService(CompilerContext outerContext)
         {
@@ -57,6 +60,11 @@ namespace ScriptEngine
             return _currentContext.DefineMethod(methodInfo).CodeIndex;
         }
 
+        public void DefinePreprocessorValue(string name)
+        {
+            _preprocessorVariables.Add(name);
+        }
+        
         private void RegisterScopeIfNeeded()
         {
             if (_scope == null)
@@ -66,11 +74,11 @@ namespace ScriptEngine
             }
         }
 
-        public ScriptModuleHandle CreateModule(ICodeSource source)
+        public ModuleImage Compile(ICodeSource source)
         {
             try
             {
-                return Compile(source);
+                return CompileInternal(source);
             }
             finally
             {
@@ -78,12 +86,21 @@ namespace ScriptEngine
                 _scope = null;
             }
         }
-        
-        private ScriptModuleHandle Compile(ICodeSource source)
+
+        private ModuleImage CompileInternal(ICodeSource source)
         {
             RegisterScopeIfNeeded();
 
-            var parser = new Parser();
+            var parser = new PreprocessingLexer();
+            foreach (var variable in _preprocessorVariables)
+            {
+                parser.Define(variable);
+            }
+            parser.UnknownDirective += (sender, args) =>
+            {
+                // все неизвестные директивы возвращать назад и обрабатывать старым кодом
+                args.IsHandled = true;
+            };
             parser.Code = source.Code;
 
             var compiler = new Compiler.Compiler();
@@ -115,30 +132,14 @@ namespace ScriptEngine
                 }
             }
 
-            foreach (var item in _predefinedVariables)
-            {
-                var varDef = _scope.GetVariable(item);
-                if (varDef.Type == SymbolType.ContextProperty)
-                {
-                    compiledImage.ExportedProperties.Add(new ExportedSymbol()
-                    {
-                        SymbolicName = varDef.Identifier,
-                        Index = varDef.Index
-                    });
-                }
-            }
-
             var mi = new ModuleInformation();
-            mi.CodeIndexer = parser.GetCodeIndexer();
+            mi.CodeIndexer = parser.Iterator;
             // пока у модулей нет собственных имен, будет совпадать с источником модуля
             mi.ModuleName = source.SourceDescription;
             mi.Origin = source.SourceDescription;
             compiledImage.ModuleInfo = mi;
 
-            return new ScriptModuleHandle()
-            {
-                Module = compiledImage
-            };
+            return compiledImage;
         }
 
         private bool ResolveDirective(string directive, string value, bool codeEntered)

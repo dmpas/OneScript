@@ -1,7 +1,12 @@
+@echo off
 chcp 65001
-echo lib.system=%APPVEYOR_BUILD_FOLDER%\oscript-library\src > src\oscript\bin\x86\Release\oscript.cfg
+
 cd tests
-..\src\oscript\bin\x86\Release\oscript.exe testrunner.os -runall .
+rem ..\src\oscript\bin\x86\Release\net452\oscript.exe testrunner.os -runall xdto
+..\src\oscript\bin\x86\Release\net452\oscript.exe testrunner.os -runall xmlschema
+rem ..\src\oscript\bin\x86\Release\net452\oscript.exe testrunner.os -runall global-funcs.os 
+
+
 
 if %ERRORLEVEL%==2 GOTO good_exit
 if %ERRORLEVEL%==0 GOTO good_exit

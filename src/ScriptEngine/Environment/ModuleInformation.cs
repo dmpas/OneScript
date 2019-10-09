@@ -9,13 +9,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using OneScript.Language.LexicalAnalysis;
 
 namespace ScriptEngine.Environment
 {
-    class ModuleInformation
+    public class ModuleInformation
     {
         public string ModuleName { get; set; }
-        public ISourceCodeIndexer CodeIndexer { get; set; }
+        internal ISourceCodeIndexer CodeIndexer { get; set; }
         public string Origin { get; set; }
 
         public override string ToString()

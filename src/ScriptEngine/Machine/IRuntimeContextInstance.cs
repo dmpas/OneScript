@@ -27,7 +27,7 @@ namespace ScriptEngine.Machine
 
         int GetPropCount();
         string GetPropName(int propNum);
-        
+
         int FindMethod(string name);
         int GetMethodsCount();
         MethodInfo GetMethodInfo(int methodNumber);
@@ -63,6 +63,18 @@ namespace ScriptEngine.Machine
             }
 
             return infos;
+        }
+
+        public static IValue GetPropValue(this IRuntimeContextInstance context, string propName)
+        {
+            int propNum = context.FindProperty(propName);
+
+            if (propNum == -1)
+            {
+                throw RuntimeException.InvalidArgumentValue(propName);
+            }
+
+            return context.GetPropValue(propNum);
         }
     }
 

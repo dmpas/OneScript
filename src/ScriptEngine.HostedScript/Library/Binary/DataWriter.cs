@@ -46,7 +46,6 @@ namespace ScriptEngine.HostedScript.Library.Binary
             var fileStreamContext = append ? fileSubsystem.OpenForAppend(fileName) : fileSubsystem.OpenForWrite(fileName);
 
             _binaryWriter = new BinaryWriter(fileStreamContext.GetUnderlyingStream(), _workingEncoding);
-        
         }
 
         public DataWriter(IStreamWrapper streamObj, IValue textEncoding, ByteOrderEnum? byteOrder, string lineSplitter, string convertibleSplitterOfLines, bool writeBOM)
@@ -57,8 +56,7 @@ namespace ScriptEngine.HostedScript.Library.Binary
             _writeBOM = writeBOM;
             TextEncoding = textEncoding;
 
-            _binaryWriter = new BinaryWriter(streamObj.GetUnderlyingStream(), _workingEncoding);
-        
+            _binaryWriter = new BinaryWriter(streamObj.GetUnderlyingStream(), _workingEncoding, true);
         }
 
         /// <summary>
@@ -67,8 +65,8 @@ namespace ScriptEngine.HostedScript.Library.Binary
         /// После завершения работы с объектом, до закрытия потока, переданного в конструктор, объект необходимо закрыть с помощью метода Закрыть или НачатьЗакрытие. При этом используемый файл будет закрыт автоматически.
         /// </summary>
         ///
-        /// <param name="fileName">
-        /// Имя файла, в который будет выполнена запись. </param>
+        /// <param name="file_stream">
+        /// Имя файла или поток, в который будет выполнена запись. </param>
         /// <param name="textEncoding">
         /// Кодировка текста для создаваемого экземпляра ЗаписьДанных. Если не задана, то используется UTF-8.
         /// Значение по умолчанию: UTF8. Типы: КодировкаТекста (TextEncoding), Строка (String) </param>
@@ -78,24 +76,44 @@ namespace ScriptEngine.HostedScript.Library.Binary
         /// <param name="lineSplitter">
         /// Разделитель по умолчанию для строк, записываемых в поток. Если разделитель строк не задан, то используется строка ПС.
         /// Значение по умолчанию: ПС. </param>
-        /// <param name="append">
-        /// Определяет, будут ли данные записаны в начало или в конец файла:
-        /// 
+        /// <param name="param5">
+        /// Для файла:
+        ///  Определяет, будут ли данные записаны в начало или в конец файла:
         ///  - Если Истина, то при открытии существующего файла запись будет выполнена в конец файла.
         ///  - Иначе данные будут записываться с начала файла, перезаписывая существующие данные.
-        /// Если заданный файл не существует, будет создан новый файл с указанным именем и значение параметра не повлияет на поведение конструктора.
-        /// Значение по умолчанию: Ложь. </param>
-        /// <param name="convertibleSplitterOfLines">
-        /// Определяет разделение строк в файле для конвертации в стандартный перевод строк ПС.
-        /// Значение по умолчанию: ВК + ПС. </param>
-        /// <param name="writeBOM">
-        /// Если в начало файла или потока требуется записать метку порядка байтов (BOM) для используемой кодировки текста, то данный параметр должен иметь значение Истина.
-        /// Значение по умолчанию: Ложь. </param>
+        ///  Если заданный файл не существует, будет создан новый файл с указанным именем и значение параметра не повлияет на поведение конструктора.
+        ///  Значение по умолчанию: Ложь.
+        /// Для потока:
+        ///  Определяет разделение строк в файле для конвертации в стандартный перевод строк ПС.
+        ///  Значение по умолчанию: ВК + ПС. </param>
+        /// <param name="param6">
+        /// Для файла:
+        ///  Определяет разделение строк в файле для конвертации в стандартный перевод строк ПС.
+        ///  Значение по умолчанию: ВК + ПС.
+        /// Для потока:
+        ///  Если в начало файла или потока требуется записать метку порядка байтов (BOM) для используемой кодировки текста, то данный параметр должен иметь значение Истина.
+        ///  Значение по умолчанию: Ложь. </param>
+        /// <param name="param7">
+        /// Только для файла:
+        ///  Если в начало файла требуется записать метку порядка байтов (BOM) для используемой кодировки текста, то данный параметр должен иметь значение Истина.
+        ///  Значение по умолчанию: Ложь. </param>
         ///
-        [ScriptConstructor(Name = "На основании имени файла")]
-        public static IRuntimeContextInstance Constructor(string fileName, IValue textEncoding = null, ByteOrderEnum? byteOrder = null, string lineSplitter = null, bool append = false, string convertibleSplitterOfLines = null, bool writeBOM = false)
+        [ScriptConstructor]
+        public static DataWriter Constructor(IValue file_stream, IValue textEncoding = null, IValue byteOrder = null, IValue lineSplitter = null, IValue param5 = null, IValue param6 = null, IValue param7 = null)
         {
-            return new DataWriter(fileName, textEncoding, byteOrder, lineSplitter, append, convertibleSplitterOfLines, writeBOM);
+            if (file_stream.DataType == DataType.String)
+                return new DataWriter(file_stream.AsString(), textEncoding, 
+                            ContextValuesMarshaller.ConvertParam<ByteOrderEnum?>(byteOrder,null),
+                            ContextValuesMarshaller.ConvertParam<string>(lineSplitter),
+                            ContextValuesMarshaller.ConvertParam<bool>(param5),
+                            ContextValuesMarshaller.ConvertParam<string>(param6),
+                            ContextValuesMarshaller.ConvertParam<bool>(param7));
+            else
+                return ConstructorByStream(file_stream, textEncoding,
+                            ContextValuesMarshaller.ConvertParam<ByteOrderEnum?>(byteOrder,null),
+                            ContextValuesMarshaller.ConvertParam<string>(lineSplitter),
+                            ContextValuesMarshaller.ConvertParam<string>(param5),
+                            ContextValuesMarshaller.ConvertParam<bool>(param6));
         }
 
         /// <summary>
@@ -122,8 +140,8 @@ namespace ScriptEngine.HostedScript.Library.Binary
         /// Если в начало файла или потока требуется записать метку порядка байтов (BOM) для используемой кодировки текста, то данный параметр должен иметь значение Истина.
         /// Значение по умолчанию: Ложь. </param>
         ///
-        [ScriptConstructor(Name = "На основании потока")]
-        public static IRuntimeContextInstance Constructor1(IValue stream, IValue textEncoding = null, ByteOrderEnum? byteOrder = null, string lineSplitter = null, string convertibleSplitterOfLines = null, bool writeBOM = false)
+        //[ScriptConstructor(Name = "На основании потока")]
+        public static DataWriter ConstructorByStream(IValue stream, IValue textEncoding = null, ByteOrderEnum? byteOrder = null, string lineSplitter = null, string convertibleSplitterOfLines = null, bool writeBOM = false)
         {
             var streamObj = stream.AsObject() as IStreamWrapper;
             if (streamObj == null)
@@ -133,7 +151,7 @@ namespace ScriptEngine.HostedScript.Library.Binary
 
             return new DataWriter(streamObj, textEncoding, byteOrder, lineSplitter, convertibleSplitterOfLines, writeBOM);
         }
-    
+
         /// <summary>
         /// 
         /// Кодировка текста по-умолчанию для данного экземпляра ЗаписьДанных.
@@ -276,7 +294,7 @@ namespace ScriptEngine.HostedScript.Library.Binary
         public void WriteChars(string line, IValue encoding = null)
         {
             if(encoding == null)
-                _binaryWriter.Write(line);
+                _binaryWriter.Write(line.ToCharArray());
             else
             {
                 var enc = TextEncodingEnum.GetEncoding(encoding, _writeBOM);
@@ -309,7 +327,7 @@ namespace ScriptEngine.HostedScript.Library.Binary
             // Кому надо - попросит PR.
 
             if (encoding == null)
-                _binaryWriter.Write(line);
+                _binaryWriter.Write(line.ToCharArray());
             else
             {
                 var enc = TextEncodingEnum.GetEncoding(encoding, _writeBOM);
@@ -318,9 +336,9 @@ namespace ScriptEngine.HostedScript.Library.Binary
             }
 
             if(lineSplitter == null)
-                _binaryWriter.Write(LineSplitter);
+                _binaryWriter.Write(LineSplitter.ToCharArray());
             else
-                _binaryWriter.Write(lineSplitter);
+                _binaryWriter.Write(lineSplitter.ToCharArray());
         }
 
         private byte[] GetBytes<T>(T value, Converter<T, byte[]> leConverter, Converter<T, byte[]> beConverter, IValue byteOrder = null)

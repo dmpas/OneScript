@@ -5,6 +5,7 @@ was not distributed with this file, You can obtain one
 at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
 using System;
+using System.Linq;
 
 namespace ScriptEngine.Machine.Contexts
 {
@@ -17,6 +18,26 @@ namespace ScriptEngine.Machine.Contexts
             if (valueObj == null)
             {
                 return default(T);
+            }
+            
+            try
+            {
+                return (T)valueObj;
+            }
+            catch (InvalidCastException)
+            {
+                throw RuntimeException.InvalidArgumentType();
+            }
+           
+        }
+
+        public static T ConvertParam<T>(IValue value, T defaultValue)
+        {
+            var type = typeof(T);
+            object valueObj = ConvertParam(value, type);
+            if (valueObj == null)
+            {
+                return defaultValue;
             }
             
             try
@@ -51,22 +72,38 @@ namespace ScriptEngine.Machine.Contexts
             {
                 valueObj = value;
             }
+            else if (type == typeof(string))
+            {
+                valueObj = value.AsString();
+            }
             else if (value == SimpleConstantValue.Undefined()) 
             {
                 // Если тип параметра не IValue и не IVariable && Неопределено -> null
                 valueObj = null;
             }
-            else if (type == typeof(string))
-            {
-                valueObj = value.AsString();
-            }
-            else if (type == typeof(int) || type == typeof(short) || type == typeof(sbyte))
+            else if (type == typeof(int))
             {
                 valueObj = (int)value.AsNumber();
             }
-            else if (type == typeof(uint) || type == typeof(ushort) || type == typeof(byte))
+            else if (type == typeof(sbyte))
+            {
+                valueObj = (sbyte)value.AsNumber();
+            }
+            else if (type == typeof(short))
+            {
+                valueObj = (short)value.AsNumber();
+            }
+            else if (type == typeof(ushort))
+            {
+                valueObj = (ushort)value.AsNumber();
+            }
+            else if (type == typeof(uint))
             {
                 valueObj = (uint)value.AsNumber();
+            }
+            else if (type == typeof(byte))
+            {
+                valueObj = (byte)value.AsNumber();
             }
             else if (type == typeof(long))
             {
@@ -76,7 +113,11 @@ namespace ScriptEngine.Machine.Contexts
             {
                 valueObj = (ulong)value.AsNumber();
             }
-            else if (type == typeof(double) || type == typeof(decimal))
+            else if (type == typeof(double))
+            {
+                valueObj = (double)value.AsNumber();
+            }
+            else if (type == typeof(decimal))
             {
                 valueObj = value.AsNumber();
             }
@@ -104,17 +145,14 @@ namespace ScriptEngine.Machine.Contexts
             return valueObj;
         }
 
-        public static IValue ConvertReturnValue<TRet>(TRet param)
+        public static IValue ConvertReturnValue(object objParam, Type type)
         {
-            var type = typeof(TRet);
-            object objParam = (object)param;
-
             if (objParam == null)
                 return ValueFactory.Create();
 
             if (type == typeof(IValue))
             {
-                return (IValue)param;
+                return (IValue)objParam;
             }
             else if (type == typeof(string))
             {
@@ -154,20 +192,45 @@ namespace ScriptEngine.Machine.Contexts
             }
             else if (type.IsEnum)
             {
-                var wrapperType = typeof(CLREnumValueWrapper<>).MakeGenericType(new Type[] { type });
-                var constructor = wrapperType.GetConstructor(new Type[] { typeof(EnumerationContext), type, typeof(DataType) });
-                var osValue = (EnumerationValue)constructor.Invoke(new object[] { null, param, DataType.Enumeration });
-                return osValue;
+                return ConvertEnum(objParam, type);
             }
             else if (typeof(IRuntimeContextInstance).IsAssignableFrom(type))
             {
                 return ValueFactory.Create((IRuntimeContextInstance)objParam);
             }
+            else if (typeof(IValue).IsAssignableFrom(type))
+            {
+                return (IValue)objParam;
+            }
             else
             {
-                throw new NotSupportedException("Type is not supported");
+                throw new NotSupportedException($"Type {type} is not supported");
             }
+        }
 
+        private static IValue ConvertEnum(object objParam, Type type)
+        {
+            if (!type.IsAssignableFrom(objParam.GetType()))
+                throw new RuntimeException("Некорректный тип конвертируемого перечисления");
+
+            var memberInfo = type.GetMember(objParam.ToString());
+            var valueInfo = memberInfo.FirstOrDefault(x => x.DeclaringType == type);
+            var attrs = valueInfo.GetCustomAttributes(typeof(EnumItemAttribute), false);
+
+            if (attrs.Length == 0)
+                throw new RuntimeException("Значение перечисления должно быть помечено атрибутом EnumItemAttribute");
+
+            var itemName = ((EnumItemAttribute)attrs[0]).Name;
+            var enumImpl = GlobalsManager.GetSimpleEnum(type);
+
+            return enumImpl.GetPropValue(itemName);
+        }
+
+        public static IValue ConvertReturnValue<TRet>(TRet param)
+        {
+            var type = typeof(TRet);
+
+            return ConvertReturnValue(param, type);
         }
 
 		public static object ConvertToCLRObject(IValue val)
@@ -201,7 +264,7 @@ namespace ScriptEngine.Machine.Contexts
 				if (result is IObjectWrapper)
 					result = ((IObjectWrapper)result).UnderlyingObject;
 				else
-				    throw new ValueMarshallingException("Тип не поддерживает преобразование в CLR-объект");
+				    throw new ValueMarshallingException($"Тип {val.GetType()} не поддерживает преобразование в CLR-объект");
 
                 break;
 			}

@@ -18,7 +18,7 @@ using ScriptEngine.HostedScript.Library.Binary;
 namespace ScriptEngine.HostedScript.Library.Hash
 {
     [ContextClass("ХешированиеДанных", "DataHashing")]
-    public class HashImpl : AutoContext<HashImpl>
+    public class HashImpl : AutoContext<HashImpl>, IDisposable
     {
         protected HashAlgorithm _provider;
         protected IValue _enumValue;
@@ -115,7 +115,7 @@ namespace ScriptEngine.HostedScript.Library.Hash
         {
             if (!File.Exists(path))
                 throw RuntimeException.InvalidArgumentType();
-            AddStream(new FileStream(path, FileMode.Open));
+            AddStream(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite));
         }
 
         [ContextMethod("Очистить", "Clear")]
@@ -129,7 +129,7 @@ namespace ScriptEngine.HostedScript.Library.Hash
 
 
         [ScriptConstructor(Name = "По указанной хеш-функции")]
-        public static IRuntimeContextInstance Constructor(IValue providerEnum)
+        public static HashImpl Constructor(IValue providerEnum)
         {
             var objectProvider = HashFunctionEnum.GetProvider(providerEnum);
             return new HashImpl(objectProvider, providerEnum);

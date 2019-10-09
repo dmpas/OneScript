@@ -17,8 +17,6 @@ namespace StandaloneRunner
 	{
 		private static int Main(string[] args)
 		{
-			AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
-
 			return Run(args);
 		}
 
@@ -29,18 +27,6 @@ namespace StandaloneRunner
 				CommandLineArguments = args
 			};
 			return sp.Run();
-		}
-
-		private static Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
-		{
-			var resourceName = "StandaloneRunner." + new AssemblyName(args.Name).Name + ".dll";
-
-			using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
-			{
-				var asmData = new byte[stream.Length];
-				stream.Read(asmData, 0, asmData.Length);
-				return Assembly.Load(asmData);
-			}
 		}
 	}
 }

@@ -8,11 +8,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using OneScript.Language;
 
 namespace ScriptEngine.Machine
 {
     public class RuntimeException : ScriptException
     {
+        private List<ExecutionFrameInfo> _frames;
+
         public RuntimeException() : base()
         {
         }
@@ -24,6 +27,18 @@ namespace ScriptEngine.Machine
         public RuntimeException(string msg, Exception inner)
             : base(new CodePositionInfo(), msg, inner)
         {
+        }
+
+        public IEnumerable<ExecutionFrameInfo> GetStackTrace()
+        {
+            return _frames.AsReadOnly();
+        }
+
+        internal IList<ExecutionFrameInfo> CallStackFrames => _frames;
+
+        internal void InitCallStackFrames(IEnumerable<ExecutionFrameInfo> src)
+        {
+            _frames = src == null ? new List<ExecutionFrameInfo>() : new List<ExecutionFrameInfo>(src);
         }
 
         public static RuntimeException DeprecatedMethodCall(string name)
@@ -66,6 +81,11 @@ namespace ScriptEngine.Machine
             return new RuntimeException(string.Format("Метод объекта не обнаружен ({0})", methodName));
         }
 
+        public static RuntimeException MethodNotFoundException(string methodName, string objectName)
+        {
+            return new RuntimeException(string.Format("Метод объекта не обнаружен ({{{1}}}::{0})", methodName, objectName));
+        }
+
         public static RuntimeException ValueIsNotObjectException()
         {
             return new RuntimeException("Значение не является значением объектного типа");
@@ -76,7 +96,7 @@ namespace ScriptEngine.Machine
             return new RuntimeException("Слишком много фактических параметров");
         }
 
-        public static RuntimeException TooLittleArgumentsPassed()
+        public static RuntimeException TooFewArgumentsPassed()
         {
             return new RuntimeException("Недостаточно фактических параметров");
         }
@@ -91,9 +111,24 @@ namespace ScriptEngine.Machine
             return new RuntimeException(String.Format("Неверный тип аргумента '{0}'", argName));
         }
 
+        public static RuntimeException InvalidNthArgumentType(int argNum)
+        {
+            return new RuntimeException(String.Format("Неверный тип аргумента номер {0}", argNum));
+        }
+
+        public static RuntimeException InvalidArgumentType(int argNum, string argName )
+        {
+            return new RuntimeException(String.Format("Неверный тип аргумента номер {0} '{1}'", argNum, argName ));
+        }
+
         public static RuntimeException InvalidArgumentValue()
         {
             return new RuntimeException("Неверное значение аргумента");
+        }
+
+        public static RuntimeException InvalidNthArgumentValue(int argNum)
+        {
+            return new RuntimeException(String.Format("Неверное значение аргумента номер {0}", argNum));
         }
 
         public static RuntimeException InvalidArgumentValue(object value)
@@ -125,7 +160,6 @@ namespace ScriptEngine.Machine
         {
             return new RuntimeException("Деление на ноль");
         }
-
 
     }
 

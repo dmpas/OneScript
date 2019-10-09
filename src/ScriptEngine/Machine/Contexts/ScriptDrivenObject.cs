@@ -7,36 +7,34 @@ at http://mozilla.org/MPL/2.0/.
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using ScriptEngine.Environment;
 
 namespace ScriptEngine.Machine.Contexts
 {
     public abstract class ScriptDrivenObject : PropertyNameIndexAccessor, IRunnable
     {
-        private readonly LoadedModule _module;
-        private MachineInstance _machine;
+        private LoadedModule _module;
         private IVariable[] _state;
         private int VARIABLE_COUNT;
         private int METHOD_COUNT;
         private MethodInfo[] _attachableMethods;
         private readonly Dictionary<string, int> _methodSearchCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, int> _propertySearchCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        
+        private readonly Dictionary<string, int> _allPropertiesSearchCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        [Obsolete]
         public ScriptDrivenObject(LoadedModuleHandle module) : this(module.Module)
         {
         }
 
+        [Obsolete]
         public ScriptDrivenObject(LoadedModuleHandle module, bool deffered) : this(module.Module, deffered)
         {
         }
+        
+        public LoadedModule Module => _module;
 
-        public LoadedModuleHandle Module => new LoadedModuleHandle()
-        {
-            Module = _module
-        };
-
-        internal ScriptDrivenObject(LoadedModule module, bool deffered)
+        protected ScriptDrivenObject(LoadedModule module, bool deffered)
             : base(TypeManager.GetTypeByName("Object"))
         {
             _module = module;
@@ -46,11 +44,19 @@ namespace ScriptEngine.Machine.Contexts
             }
         }
 
-        internal ScriptDrivenObject(LoadedModule module)
-            : base(TypeManager.GetTypeByName("Object"))
+        protected ScriptDrivenObject(LoadedModule module)
         {
             _module = module;
             InitOwnData();
+        }
+
+        protected ScriptDrivenObject()
+        {
+        }
+
+        protected void SetModule(LoadedModule module)
+        {
+            _module = module;
         }
 
         public void InitOwnData()
@@ -71,6 +77,17 @@ namespace ScriptEngine.Machine.Contexts
 
             ReadExportedSymbols(_module.ExportedMethods, _methodSearchCache);
             ReadExportedSymbols(_module.ExportedProperies, _propertySearchCache);
+            ReadVariables(_module.Variables, _allPropertiesSearchCache);
+
+        }
+
+        private void ReadVariables(VariablesFrame vars, Dictionary<string, int> searchCache)
+        {
+            for (int i = 0; i < vars.Count; i++)
+            {
+                var variable = vars[i];
+                searchCache[variable.Identifier] = variable.Index;
+            }
         }
 
         private void ReadExportedSymbols(ExportedSymbol[] exportedSymbols, Dictionary<string, int> searchCache)
@@ -103,12 +120,11 @@ namespace ScriptEngine.Machine.Contexts
 
         protected virtual void OnInstanceCreation()
         {
-            _machine.ExecuteModuleBody(this);
+            MachineInstance.Current.ExecuteModuleBody(this);
         }
 
-        public void Initialize(MachineInstance runner)
+        public void Initialize()
         {
-            _machine = runner;
             OnInstanceCreation();
         }
 
@@ -132,7 +148,7 @@ namespace ScriptEngine.Machine.Contexts
 
         protected IValue CallScriptMethod(int methodIndex, IValue[] parameters)
         {
-            var returnValue = _machine.ExecuteMethod(this, methodIndex, parameters);
+            var returnValue = MachineInstance.Current.ExecuteMethod(this, methodIndex, parameters);
 
             return returnValue;
         }
@@ -199,9 +215,6 @@ namespace ScriptEngine.Machine.Contexts
 
             variables = _state;
             methods = AttachMethods();
-
-            _machine = machine;
-
         }
 
         private MethodInfo[] AttachMethods()
@@ -263,7 +276,7 @@ namespace ScriptEngine.Machine.Contexts
                 if (_methodSearchCache.TryGetValue(name, out index))
                     return index;
                 else
-                    throw RuntimeException.MethodNotFoundException(name);
+                    throw RuntimeException.MethodNotFoundException(name, _module.ModuleInfo.ModuleName);
             }
         }
 
@@ -333,7 +346,7 @@ namespace ScriptEngine.Machine.Contexts
         {
             if (MethodDefinedInScript(methodNumber))
             {
-                _machine.ExecuteMethod(this, methodNumber - METHOD_COUNT, arguments);
+                MachineInstance.Current.ExecuteMethod(this, methodNumber - METHOD_COUNT, arguments);
             }
             else
             {
@@ -345,7 +358,7 @@ namespace ScriptEngine.Machine.Contexts
         {
             if (MethodDefinedInScript(methodNumber))
             {
-                retValue = _machine.ExecuteMethod(this, methodNumber - METHOD_COUNT, arguments);
+                retValue = MachineInstance.Current.ExecuteMethod(this, methodNumber - METHOD_COUNT, arguments);
             }
             else
             {
@@ -357,6 +370,11 @@ namespace ScriptEngine.Machine.Contexts
         public override int GetPropCount()
         {
             return VARIABLE_COUNT + _module.ExportedProperies.Length;
+        }
+        
+        public override int GetMethodsCount()
+        {
+            return METHOD_COUNT + _module.ExportedMethods.Length;
         }
 
         public override string GetPropName(int propNum)
@@ -373,6 +391,15 @@ namespace ScriptEngine.Machine.Contexts
 
         #endregion
 
+        public int FindAnyProperty(string name)
+        {
+            int index;
+            if (_allPropertiesSearchCache.TryGetValue(name, out index))
+                return index;
+            else
+                throw RuntimeException.PropNotFoundException(name);
+        }
+
         public string[] GetExportedProperties()
         {
             return _module.ExportedProperies.Select(x => x.SymbolicName).ToArray();
@@ -385,7 +412,8 @@ namespace ScriptEngine.Machine.Contexts
 
         public Type ReflectAsCLRType()
         {
-            return ReflectedClassType.ReflectModule(_module, GetReflectedTypeName());
+            throw new NotImplementedException();
+            //return ReflectedClassType.ReflectModule(_module, GetReflectedTypeName());
         }
 
         protected virtual string GetReflectedTypeName()

@@ -20,7 +20,7 @@ namespace ScriptEngine.HostedScript.Library.Http
     /// Данные и заголоки HTTP запроса.
     /// </summary>
     [ContextClass("HTTPЗапрос", "HTTPRequest")]
-    public class HttpRequestContext : AutoContext<HttpRequestContext>
+    public class HttpRequestContext : AutoContext<HttpRequestContext>, IDisposable
     {
 
         IHttpRequestBody _body;
@@ -101,16 +101,23 @@ namespace ScriptEngine.HostedScript.Library.Http
         /// </summary>
         /// <param name="data">Строка с данными</param>
         /// <param name="encoding">КодировкаТекста или Строка. Кодировка в которой отправляются данные.</param>
+        /// <param name="bomUsage">Использовать метку порядка байтов (BOM) для кодировок, которые ее поддерживают.</param>
         [ContextMethod("УстановитьТелоИзСтроки", "SetBodyFromString")]
-        public void SetBodyFromString(string data, IValue encoding = null)
+        public void SetBodyFromString(string data, IValue encoding = null, ByteOrderMarkUsageEnum bomUsage = ByteOrderMarkUsageEnum.Auto)
         {
-            SetBody(new HttpRequestBodyString(data, encoding));
+            SetBody(new HttpRequestBodyString(data, encoding, bomUsage));
         }
 
         [ContextMethod("ПолучитьТелоКакСтроку", "GetBodyAsString")]
         public IValue GetBodyAsString()
         {
             return _body.GetAsString();
+        }
+
+        [ContextMethod("ПолучитьТелоКакПоток", "GetBodyAsStream")]
+        public GenericStream GetBodyAsStream()
+        {
+            return new GenericStream(_body.GetDataStream());
         }
 
         [ScriptConstructor(Name = "Формирование неинициализированного объекта")]
@@ -136,5 +143,9 @@ namespace ScriptEngine.HostedScript.Library.Http
             return ctx;
         }
 
+        public void Dispose()
+        {
+            _body?.Dispose();
+        }
     }
 }

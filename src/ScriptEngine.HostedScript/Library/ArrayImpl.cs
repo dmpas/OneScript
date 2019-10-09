@@ -36,12 +36,18 @@ namespace ScriptEngine.HostedScript.Library
 
         public override IValue GetIndexedValue(IValue index)
         {
-            return Get((int)index.AsNumber());
+            if(index.DataType == DataType.Number)
+                return Get((int)index.AsNumber());
+
+            return base.GetIndexedValue(index);
         }
 
         public override void SetIndexedValue(IValue index, IValue val)
         {
-            _values[(int)index.AsNumber()] = val;
+            if (index.DataType == DataType.Number)
+                Set((int)index.AsNumber(), val);
+            else
+                base.SetIndexedValue(index, val);
         }
 
         public override bool IsPropReadable(int propNum)
@@ -105,6 +111,12 @@ namespace ScriptEngine.HostedScript.Library
         [ContextMethod("Вставить", "Insert")]
         public void Insert(int index, IValue value)
         {
+            if (index < 0)
+                throw IndexOutOfBoundsException();
+
+            if (index > _values.Count)
+                Extend(index - _values.Count);
+
             _values.Insert(index, value);
         }
 
@@ -125,6 +137,9 @@ namespace ScriptEngine.HostedScript.Library
         [ContextMethod("Удалить", "Delete")]
         public void Remove(int index)
         {
+            if (index < 0 || index >= _values.Count)
+                throw IndexOutOfBoundsException();
+
             _values.RemoveAt(index);
         }
 
@@ -137,13 +152,27 @@ namespace ScriptEngine.HostedScript.Library
         [ContextMethod("Получить", "Get")]
         public IValue Get(int index)
         {
+            if (index < 0 || index >= _values.Count)
+                throw IndexOutOfBoundsException();
+
             return _values[index];
         }
 
         [ContextMethod("Установить", "Set")]
         public void Set(int index, IValue value)
         {
+            if (index < 0 || index >= _values.Count)
+                throw IndexOutOfBoundsException();
+
             _values[index] = value;
+        }
+
+        private void Extend(int count)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                _values.Add(ValueFactory.Create());
+            }
         }
 
         private static void FillArray(ArrayImpl currentArray, int bound)
@@ -168,7 +197,7 @@ namespace ScriptEngine.HostedScript.Library
         }
 
         [ScriptConstructor]
-        public static IRuntimeContextInstance Constructor()
+        public static ArrayImpl Constructor()
         {
             return new ArrayImpl();
         }
@@ -179,12 +208,23 @@ namespace ScriptEngine.HostedScript.Library
         /// <param name="dimensions">Числовые размерности массива. Например, "Массив(2,3)", создает двумерный массив 2х3.</param>
         /// <returns></returns>
         [ScriptConstructor(Name = "По количеству элементов")]
-        public static IRuntimeContextInstance Constructor(IValue[] dimensions)
+        public static ArrayImpl Constructor(IValue[] dimensions)
         {
+            if (dimensions.Length == 1 && dimensions[0].GetRawValue() is FixedArrayImpl)
+            {
+                return Constructor(dimensions[0]);
+            }
+            
             ArrayImpl cloneable = null;
             for (int dim = dimensions.Length - 1; dim >= 0; dim--)
             {
+                if (dimensions[dim] == null)
+                    throw RuntimeException.InvalidNthArgumentType(dim + 1);
+
                 int bound = (int)dimensions[dim].AsNumber();
+                if (bound <= 0)
+                    throw RuntimeException.InvalidNthArgumentValue(dim + 1);
+
                 var newInst = new ArrayImpl();
                 FillArray(newInst, bound);
                 if(cloneable != null)
@@ -202,5 +242,18 @@ namespace ScriptEngine.HostedScript.Library
 
         }
 
+        [ScriptConstructor(Name = "На основании фиксированного массива")]
+        public static ArrayImpl Constructor(IValue fixedArray)
+        {
+            if (!(fixedArray.GetRawValue() is FixedArrayImpl val))
+                throw RuntimeException.InvalidArgumentType();
+            
+            return new ArrayImpl(val);
+        }
+
+        private static RuntimeException IndexOutOfBoundsException()
+        {
+            return new RuntimeException("Значение индекса выходит за пределы диапазона");
+        }
     }
 }

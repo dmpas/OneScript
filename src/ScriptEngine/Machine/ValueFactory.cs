@@ -6,6 +6,7 @@ at http://mozilla.org/MPL/2.0/.
 ----------------------------------------------------------*/
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -45,7 +46,7 @@ namespace ScriptEngine.Machine
 
         public static IValue CreateInvalidValueMarker()
         {
-            return new InvalidValue();
+            return InvalidValue.Instance;
         }
 
         public static IValue CreateNullValue()
@@ -65,9 +66,13 @@ namespace ScriptEngine.Machine
             {
                 case DataType.Boolean:
 
-                    if (string.Compare(presentation, "истина", true) == 0 || string.Compare(presentation, "true", true) == 0)
+                    if (String.Compare(presentation, "истина", StringComparison.OrdinalIgnoreCase) == 0 
+                        || String.Compare(presentation, "true", StringComparison.OrdinalIgnoreCase) == 0 
+                        || String.Compare(presentation, "да", StringComparison.OrdinalIgnoreCase) == 0)
                         result = ValueFactory.Create(true);
-                    else if (string.Compare(presentation, "ложь", true) == 0 || string.Compare(presentation, "false", true) == 0)
+                    else if (String.Compare(presentation, "ложь", StringComparison.OrdinalIgnoreCase) == 0 
+                             || String.Compare(presentation, "false", StringComparison.OrdinalIgnoreCase) == 0
+                             || String.Compare(presentation, "нет", StringComparison.OrdinalIgnoreCase) == 0)
                         result = ValueFactory.Create(false);
                     else
                         throw RuntimeException.ConvertToBooleanException();
@@ -75,13 +80,22 @@ namespace ScriptEngine.Machine
                     break;
                 case DataType.Date:
                     string format;
-                    if (presentation.Length == 8)
-                        format = "yyyyMMdd";
-                    else if (presentation.Length == 14)
+                    if (presentation.Length == 14)
                         format = "yyyyMMddHHmmss";
+                    else if (presentation.Length == 8)
+                        format = "yyyyMMdd";
+                    else if (presentation.Length == 12)
+                        format = "yyyyMMddHHmm";
                     else
                         throw RuntimeException.ConvertToDateException();
 
+                    if (presentation == "00000000"
+                     || presentation == "000000000000"
+                     || presentation == "00000000000000")
+                    {
+                        result = ValueFactory.Create(new DateTime());
+                    }
+                    else
                     try
                     {
                         result = ValueFactory.Create(DateTime.ParseExact(presentation, format, System.Globalization.CultureInfo.InvariantCulture));
@@ -93,9 +107,11 @@ namespace ScriptEngine.Machine
 
                     break;
                 case DataType.Number:
-                    var numInfo = System.Globalization.NumberFormatInfo.InvariantInfo;
-                    var numStyle = System.Globalization.NumberStyles.AllowDecimalPoint
-                                |System.Globalization.NumberStyles.AllowLeadingSign;
+                    var numInfo = NumberFormatInfo.InvariantInfo;
+                    var numStyle = NumberStyles.AllowDecimalPoint
+                                |NumberStyles.AllowLeadingSign
+                                |NumberStyles.AllowLeadingWhite
+                                |NumberStyles.AllowTrailingWhite;
 
                     try
                     {
@@ -128,6 +144,9 @@ namespace ScriptEngine.Machine
 
         class InvalidValue : IValue
         {
+            private static IValue _instance = new InvalidValue();
+
+            internal static IValue Instance => _instance;
 
             #region IValue Members
 

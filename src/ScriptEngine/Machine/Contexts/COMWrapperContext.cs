@@ -106,7 +106,7 @@ namespace ScriptEngine.Machine.Contexts
 
         private static bool TypeIsRuntimeCallableWrapper(Type type)
         {
-            return type.FullName == "System.__ComObject"; // string, cause it's hidden type
+            return type.FullName == "System.__ComObject" || type.BaseType.FullName == "System.__ComObject"; // string, cause it's hidden type
         }
 
         public static object[] MarshalArguments(IValue[] arguments)
@@ -205,6 +205,10 @@ namespace ScriptEngine.Machine.Contexts
             else if (type == typeof(double))
             {
                 return ValueFactory.Create((decimal)(double)objParam);
+            }
+            else if (type == typeof(Single))
+            {
+                return ValueFactory.Create((decimal)System.Convert.ToDouble(objParam));
             }
             else if (type == typeof(decimal))
             {
@@ -309,7 +313,7 @@ namespace ScriptEngine.Machine.Contexts
         }
 
         [ScriptConstructor]
-        public static IRuntimeContextInstance Constructor(IValue[] args)
+        public static COMWrapperContext Constructor(IValue[] args)
         {
             return COMWrapperContext.Create(args[0].AsString(), args.Skip(1).ToArray());
         }

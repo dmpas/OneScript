@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using OneScript.Language;
 
 namespace ScriptEngine.Machine.Contexts
 {
@@ -98,6 +99,26 @@ namespace ScriptEngine.Machine.Contexts
             }
         }
 
+        /// <summary>
+        /// Предоставляет доступ к стеку вызовов процедур.
+        /// Подробнее см. класс КоллекцияКадровСтекаВызовов
+        /// </summary>
+        /// <returns></returns>
+        [ContextMethod("ПолучитьСтекВызовов", "GetStackTrace")]
+        public IValue GetStackTrace()
+        {
+            if (_exc is RuntimeException rte)
+            {
+                var frames = rte.CallStackFrames;
+                if (frames == null)
+                    return ValueFactory.Create();
+
+                return new StackTraceCollectionContext(frames);
+            }
+            else
+                return ValueFactory.Create();
+        }
+
         private string SafeMarshallingNullString(string src)
         {
             return src == null ? "" : src;
@@ -144,7 +165,7 @@ namespace ScriptEngine.Machine.Contexts
                     return ValueFactory.Create();
 
                 var inner = new ExternalSystemException(_exc.InnerException.InnerException);
-                if (inner.LineNumber == 0)
+                if (inner.LineNumber == CodePositionInfo.OUT_OF_TEXT)
                 {
                     inner.ModuleName = this.ModuleName;
                     inner.Code = this.SourceLine;

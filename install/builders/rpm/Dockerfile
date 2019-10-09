@@ -1,4 +1,4 @@
-FROM fedora
+FROM fedora:26
 MAINTAINER Chmouel Boudjnah <chmouel@enovance.com>
 
 
@@ -6,7 +6,7 @@ MAINTAINER Chmouel Boudjnah <chmouel@enovance.com>
 RUN dnf update -y && dnf -y group install 'Development Tools'
 
 # Install git command to access GitHub repository
-RUN dnf -y install sudo git rpmdevtools rpm-build yum-utils dnf-plugins-core dnf-plugins-extras 
+RUN dnf -y install sudo git rpmdevtools rpm-build yum-utils dnf-plugins-core
 
 RUN sed -i.bak -n -e '/^Defaults.*requiretty/ { s/^/# /;};/^%wheel.*ALL$/ { s/^/# / ;} ;/^#.*wheel.*NOPASSWD/ { s/^#[ ]*//;};p' /etc/sudoers
 
@@ -14,6 +14,8 @@ RUN sed -i.bak -n -e '/^Defaults.*requiretty/ { s/^/# /;};/^%wheel.*ALL$/ { s/^/
 # make docker always run the builddep steps since new file
 ADD oscript.spec /tmp/
 ADD oscript /tmp/
+ADD oscript-opm /tmp/
+ADD oscript-opm-completion /tmp/
 
 RUN dnf builddep -y --spec /tmp/oscript.spec
 
