@@ -13,7 +13,7 @@ namespace ScriptEngine.HostedScript.Library
 	[ContextClass("КвалификаторыДаты", "DateQualifiers")]
 	public sealed class DateQualifiers : AutoContext<DateQualifiers>, IValueAdjuster
 	{
-		public DateQualifiers(DateFractionsEnum dateFractions = DateFractionsEnum.Date)
+		public DateQualifiers(DateFractionsEnum dateFractions = DateFractionsEnum.DateTime)
 		{
 			DateFractions = dateFractions;
 		}

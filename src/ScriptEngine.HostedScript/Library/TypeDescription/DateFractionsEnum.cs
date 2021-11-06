@@ -10,11 +10,11 @@ namespace ScriptEngine.HostedScript.Library
 	[EnumerationType("ЧастиДаты", "DateFractions")]
 	public enum DateFractionsEnum
 	{
-		[EnumItem("Дата", "Date")]
-		Date,
-
 		[EnumItem("ДатаВремя", "DateTime")]
 		DateTime,
+		
+		[EnumItem("Дата", "Date")]
+		Date,
 
 		[EnumItem("Время", "Time")]
 		Time
